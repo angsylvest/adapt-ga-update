@@ -1,0 +1,44 @@
+#VRML_SIM R2023b utf8
+PROTO block [
+  field SFVec3f    translation  0 0 0
+  field SFRotation rotation     0 0 1 0
+  # field SFFloat    bodyMass     1
+  field SFString   blockName    "red stick"
+]
+
+{
+    Solid {
+    translation IS translation
+    rotation IS rotation
+    name IS blockName
+    # bodyMass IS bodyMass
+
+    children [
+        DEF STICK_SHAPE Shape {
+        appearance PBRAppearance {
+            baseColor 1 0.155604 0.246125
+            roughness 0.783569247
+            metalness 0
+        }
+        geometry Cylinder {
+            height 0.06
+            radius 0.008
+        }
+        }
+    ]
+    # name "red stick(9)"
+    model "red-rod-1"
+    contactMaterial "stick"
+    boundingObject Box {
+        size 0.013 0.013 0.06
+    }
+    physics Physics {
+        density 100
+    }
+    recognitionColors [
+        0.8 0 0
+    ]
+    linearVelocity 2.941167474984914e-17 -1.1135660267595766e-17 3.295254361075188e-16
+    angularVelocity 1.3298034687434809e-16 4.255378135189308e-16 -1.1072499514964799e-17
+    }
+}

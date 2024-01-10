@@ -1,0 +1,70 @@
+#VRML_SIM R2023b utf8
+
+IMPORTABLE EXTERNPROTO "../protos/TinkerbotsBase.proto"
+EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2023b/projects/objects/backgrounds/protos/TexturedBackgroundLight.proto"
+EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2023b/projects/objects/backgrounds/protos/TexturedBackground.proto"
+EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2023b/projects/objects/floors/protos/RectangleArena.proto"
+IMPORTABLE EXTERNPROTO "../protos/khepera.proto"
+IMPORTABLE EXTERNPROTO "../protos/khepera_individual.proto"
+IMPORTABLE EXTERNPROTO "../protos/block.proto"
+
+WorldInfo {
+  info [
+    "A Khepera robot equipped with a gripper"
+  ]
+  title "Khepera Gripper"
+  CFM 0.001
+  ERP 0.4
+  basicTimeStep 10
+  FPS 30
+  optimalThreadCount 3
+  contactProperties [
+    ContactProperties {
+      material1 "gripper"
+      material2 "stick"
+      coulombFriction [
+        10
+      ]
+      bounceVelocity 0.5
+    }
+    ContactProperties {
+      material1 "khepera"
+      coulombFriction [
+        0.1
+      ]
+    }
+  ]
+}
+Viewpoint {
+  orientation -0.29333106381610835 0.03518320380042477 0.9553632969561096 2.913418012057401
+  position 4.044250537387722 -0.9490778023607924 4.204413979740169
+}
+TexturedBackground {
+  luminosity 0.5
+}
+TexturedBackgroundLight {
+  luminosity 0.4
+}
+DEF arena RectangleArena {
+  translation -0.04 -0.07 0
+  rotation 0 1 0 4.692820414042842e-06
+  floorSize 2 2
+}
+DEF supervisor TinkerbotsBase {
+  translation -0.40999980681570314 -2.3281555732779615e-19 0.020493765715755057
+  rotation 1.5217976059830952e-12 1 -7.829335443931267e-13 4.694645743352563e-06
+  controller "ga_updated_supervisor"
+  supervisor TRUE
+  extensionSlot [
+    Emitter {
+      name "emitter_processor"
+      channel 5
+    }
+    Receiver {
+      channel 2
+    }
+    Emitter {
+      channel 1
+    }
+  ]
+}
