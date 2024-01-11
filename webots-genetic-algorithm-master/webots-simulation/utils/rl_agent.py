@@ -11,6 +11,7 @@ class RLAgent():
         self.agent_id = 0 
         self.location = (0,0)
         self.reward = 0
+        self.done = False
 
     def set_location(self, pos):
         self.location = pos

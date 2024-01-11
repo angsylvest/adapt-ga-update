@@ -103,6 +103,61 @@ class PPO():
                 torch.save(self.actor.state_dict(), './ppo_actor.pth')
                 torch.save(self.critic.state_dict(), './ppo_critic.pth')
 
+    def learn_adjusted(self, batch_obs, batch_acts, batch_log_probs, batch_rtgs, batch_lens):
+        # training actor and critic networks 
+        t_so_far = 0  # ts simulated so far 
+        i_so_far = 0  # iterations ran so far 
+        
+        # while t_so_far < total_timesteps: 
+            # collect batch sims here 
+            # batch_obs, batch_acts, batch_log_probs, batch_rtgs, batch_lens = self.roll_out()
+
+            # calc ts collected this batch 
+        t_so_far += np.sum(batch_lens)
+
+        # incre # of iterations 
+        i_so_far += 1
+
+        # log timesteps + iterations 
+        self.logger['t_so_far'] = t_so_far
+        self.logger['i_so_far'] = i_so_far
+
+        # calc advantage at k-th iteration 
+        V, _ = self.evaluate(batch_obs, batch_acts)
+        A_k = batch_rtgs - V.detach # diff between observed and estiamted return 
+
+
+        # TODO: might need to comment out, not officially in psuedo-code
+        # A_k = (A_k - A_k.mean()) / (A_k.std() + 1e-10)
+
+        # update network and n epochs 
+        for _ in range(self.n_updates_per_iteration):
+            V, curr_log_probs = self.evaluate(batch_obs, batch_acts)
+
+            ratios = torch.exp(curr_log_probs - batch_log_probs)
+
+            # calc surrogate losses 
+            surr1 = ratios * A_k
+            surr2 = torch.clamp(ratios, 1- self.clip, 1 + self.clip) * A_k
+
+            # calculate actor + critic losses 
+            actor_loss = (-torch.min(surr1, surr2)).mean()
+            critic_loss = nn.MSELoss()(V, batch_rtgs) # fit value function by regression on mean-squared error
+
+            self.actor_optim.zero_grad()
+            critic_loss.backwards()
+            self.critic_optim.step()
+
+            # log actor loss 
+            self.logger['actor_losses'].append(actor_loss.detach())
+
+        # print training performance so far 
+        self._log_summary()
+
+        # save model if it's time 
+        if i_so_far % self.save_freq == 0:
+            torch.save(self.actor.state_dict(), './ppo_actor.pth')
+            torch.save(self.critic.state_dict(), './ppo_critic.pth')
 
     def roll_out(self):
         # collect info during iteration 
