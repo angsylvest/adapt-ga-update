@@ -75,8 +75,8 @@ high_dense = True
 # total_found = 0
 # block_list = []
 # reproduce_list = []
-# r_pos_to_generate = []
-# b_pos_to_generate = []
+r_pos_to_generate = []
+b_pos_to_generate = []
 # b_pos_to_generate_alternative = []
 
 # # set-up robot 
@@ -463,7 +463,7 @@ def run_optimization():
             while updating: 
                 message_listener()
 
-            t_so_far += np.sum(batch_lens) # TODO: find way to extract this
+            # t_so_far += np.sum(batch_lens) # TODO: find way to extract this
 
             # TODO: need way to pause simulation while this calculation is happening 
     

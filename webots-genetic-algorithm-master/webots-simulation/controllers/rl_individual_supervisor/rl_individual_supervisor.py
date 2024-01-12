@@ -88,10 +88,8 @@ update_sec = 1
 # based off given id of robot assigned 
 def find_nearest_robot_genotype(r_index):
     global population 
-    global reproduce_list 
     global collected_count 
     global pairs 
-    global overall_fitness_scores
     global prev_msg 
 
     closest_neigh = " "
@@ -109,16 +107,13 @@ def find_nearest_robot_genotype(r_index):
             if closest_neigh == " ":
                 closest_neigh = str(population[i].getId())
                 curr_dist = dis
-                other_fitness = overall_fitness_scores[i]
                 other_index = i
             elif dis < curr_dist: 
                 closest_neigh = str(population[i].getId())
                 curr_dist = dis 
-                other_fitness = overall_fitness_scores[i]
                 other_index = i
                 
     return other_index
-
 
 def message_listener(time_step):
     global total_found 
@@ -155,7 +150,7 @@ def message_listener(time_step):
 
         elif 'action-request' in message: 
             curr_action = Agent.action
-            action, log_prob = model.get_action()
+            action, log_prob = env._action_to_direction(model.get_action())
 
             Agent.action = action 
             Agent.log_prob = log_prob
@@ -198,6 +193,7 @@ def message_listener(time_step):
         message_individual = receiver_individual.getString()
 
         if 'action-complete' in message_individual: 
+            Agent.reward = message_individual.split(":")[-1]
             obs, rew, done, _ = Agent.observation, Agent.reward, Agent.done
             ep_rews.append(rew)
 
@@ -205,14 +201,13 @@ def message_listener(time_step):
             curr_action = Agent.action
             action, log_prob = model.get_action()
 
-            Agent.action = action 
+            Agent.action = env._action_to_direction(action).tolist() 
             Agent.log_prob = log_prob
 
             # if complete: batch_log_probs.append(log_prob) 
             curr_action = Agent.action if not complete else action # TODO: must do next action once done with previous
             msg = f'agent_action:{curr_action}'
             emitter_individual.send(msg.encode('utf-8'))
-
             receiver_individual.nextPacket()
 
         else: 
@@ -225,6 +220,7 @@ def message_listener(time_step):
 def update_batch_info():
     global prev_time
     global update_sec
+    global given_id
 
     global batch_observations
     global batch_actions
@@ -234,7 +230,7 @@ def update_batch_info():
     if robot.getTime() - prev_time > update_sec: # update every second 
         prev_time = robot.getTime()
         # update info 
-        batch_observations.append(Agent.observation)
+        batch_observations.append(population[given_id].getPosition())
         batch_actions.append(Agent.action)
         ep_rews.append(Agent.reward)
         batch_log_probs.append(Agent.log_prob)
