@@ -156,6 +156,7 @@ time_elapsed = 0 # on a per sec basis
 # prev message (limit overloading receiver/emitter system) 
 prev_msg = "" 
 trial_num = -1 
+curr_action = ""
 
 found_something = False 
 
@@ -440,6 +441,8 @@ def interpret(timestep):
     global curr_index 
     global remove_orientations
 
+    global curr_action 
+
     
     if receiver.getQueueLength()>0:
         # message = receiver.getData().decode('utf-8')
@@ -454,7 +457,6 @@ def interpret(timestep):
             obj_found_so_far = []
             n_observations_robot = 0
             num_better = 0 
-            
             receiver.nextPacket()
             
             
@@ -616,14 +618,13 @@ def interpret(timestep):
             cleaning = False 
             receiver.nextPacket() 
             
-        elif 'comm_response' in message and str(message.split('-')[1]) == str(given_id) and communication: 
-        
-            print('updating orientation for', given_id, 'to', message.split('[')[1], 'for given id', given_id)
-            roll, pitch, yaw = inertia.getRollPitchYaw()
-            yaw = round(yaw, 2)
-            chosen_direction = float(message.split('[')[1])
-            orientation_found = False
-            receiver.nextPacket() 
+        # elif 'comm_response' in message and str(message.split('-')[1]) == str(given_id) and communication: 
+        #     print('updating orientation for', given_id, 'to', message.split('[')[1], 'for given id', given_id)
+        #     roll, pitch, yaw = inertia.getRollPitchYaw()
+        #     yaw = round(yaw, 2)
+        #     chosen_direction = float(message.split('[')[1])
+        #     orientation_found = False
+        #     receiver.nextPacket() 
       
         
         else: 
@@ -641,13 +642,16 @@ def interpret(timestep):
         elif 'comm' in message and str(message.split('-')[1]) == str(given_id) and not 'comm_response' in message:
             emitter.send(str(message).encode('utf-8'))
             receiver_individual.nextPacket()
-            
-        # if 'penalize' in message: 
-            # if t_elapsed_constant < 500: 
-                # t_elapsed_constant = t_elapsed_constant * 1.5 
-            
-            # receiver_individual.nextPacket()
-            
+
+        elif 'episode-agent-complete' in message:
+            # reset agent info 
+
+            receiver_individual.nextPacket()
+            # TODO: fill out with valid reset to agent actions
+
+        elif 'agent_action' in message: 
+            curr_action = message.split(":")[-1]
+            receiver_individual.nextPacket()
             
         else: 
             receiver_individual.nextPacket()
@@ -704,7 +708,7 @@ while robot.step(timestep) != -1 and sim_complete != True:
                 time_into_generation = 0
                 agent_observation = {'num_interactions': 0, 'num_objects_observed': 0, 'num_collisions':0}
             # print('given id', given_id, 'updated time into generation + here dictionary', agent_observation['num_interactions'] , 'num collisions', agent_observation['num_collisions']) 
-        
+
         # homing mechanism 
         if holding_something == True and not reversing and not moving_forward: # move towards nest (constant vector towards home) 
             cd_x, cd_y = float(gps.getValues()[0]), float(gps.getValues()[1])
@@ -718,21 +722,16 @@ while robot.step(timestep) != -1 and sim_complete != True:
                 time_elapsed_since_block = 0
                 time_elapsed = 0 # on a per sec basis 
                 # print('successfully dropped off object', given_id)
-            
-        if curr_index >= len(strategy) and not holding_something and not reversing and not moving_forward: # maintain strategy for initial
-            curr_index = 0 
-            # used to determine when to update strategy 
-            print('completed strategy --', strategy, 'energy expenditure --', energy_expenditure(), 'for agent: ', given_id)
-            w = weights 
-            if using_high_dens and agent_observation['num_collisions'] > 0.3:
-                w = weights_high_density
 
-            if energy_expenditure() < 0: # update the weights based off success so far 
-                strategy = choose_strategy(chosen_direction, time_elapsed_since_block, time_elapsed_since_robot, w, update = True) # chooses a new strategy   
-                # time_elapsed = 0    
-            else: 
-                strategy = choose_strategy(chosen_direction, time_elapsed_since_block, time_elapsed_since_robot, w, update = False)
-                # time_elapsed = 0 
+        # do action sequence 
+        cd_x, cd_y = float(gps.getValues()[0]), float(gps.getValues()[1])
+        goal_posx, goal_posy = curr_action.x + cd_x, curr_action.y + cd_y # TODO: not correct, but logic is there 
+        if not holding_something and not reversing and not moving_forward: 
+            if math.dist([cd_x, cd_y], [goal_posx,goal_posy]) > 0.05:  
+                chosen_direction = round(math.atan2(-cd_y,-cd_x),2) 
+            else: # request new action 
+                msg = 'action-complete'
+                emitter_individual.send(msg.encode('utf-8'))
     
         time_elapsed_since_robot +=1
         # biased random walk movement (each time step, cert prob of turning that direction) 
@@ -892,3 +891,32 @@ while robot.step(timestep) != -1 and sim_complete != True:
             
         #     # make circular movements less likely 
         #     t_elapsed_constant = t_elapsed_constant // 2 # more likely to interact with other robots
+    
+
+            # if curr_index >= len(strategy) and not holding_something and not reversing and not moving_forward: # maintain strategy for initial
+        #     curr_index = 0 
+        #     # used to determine when to update strategy 
+        #     print('completed strategy --', strategy, 'energy expenditure --', energy_expenditure(), 'for agent: ', given_id)
+        #     w = weights 
+        #     if using_high_dens and agent_observation['num_collisions'] > 0.3:
+        #         w = weights_high_density
+
+        #     if energy_expenditure() < 0: # update the weights based off success so far 
+        #         strategy = choose_strategy(chosen_direction, time_elapsed_since_block, time_elapsed_since_robot, w, update = True) # chooses a new strategy   
+        #         # time_elapsed = 0    
+        #     else: 
+        #         strategy = choose_strategy(chosen_direction, time_elapsed_since_block, time_elapsed_since_robot, w, update = False)
+        #         # time_elapsed = 0         # if curr_index >= len(strategy) and not holding_something and not reversing and not moving_forward: # maintain strategy for initial
+        #     curr_index = 0 
+        #     # used to determine when to update strategy 
+        #     print('completed strategy --', strategy, 'energy expenditure --', energy_expenditure(), 'for agent: ', given_id)
+        #     w = weights 
+        #     if using_high_dens and agent_observation['num_collisions'] > 0.3:
+        #         w = weights_high_density
+
+        #     if energy_expenditure() < 0: # update the weights based off success so far 
+        #         strategy = choose_strategy(chosen_direction, time_elapsed_since_block, time_elapsed_since_robot, w, update = True) # chooses a new strategy   
+        #         # time_elapsed = 0    
+        #     else: 
+        #         strategy = choose_strategy(chosen_direction, time_elapsed_since_block, time_elapsed_since_robot, w, update = False)
+        #         # time_elapsed = 0 

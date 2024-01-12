@@ -48,7 +48,7 @@ updating = True
 # simulation_time = 30
 # trials = 25
 # curr_trial = 0 
-# robot_population_sizes = [5]
+robot_population_sizes = [5]
 # gene_list = ['control speed 10', 'energy cost 5', 'food energy 30', 'observations thres 5']
 # curr_size = robot_population_sizes[0]
 env_type = "single source" # "power law"
@@ -376,31 +376,35 @@ def message_listener():
 
 def rollout():
     global population 
+    global max_timesteps_per_episode
 
     # batch data 
-    batch_obs = []
-    batch_acts = []
-    batch_log_probs = []
-    batch_rews = []
-    batch_rtgs = []
-    batch_lens = []
+    # batch_obs = []
+    # batch_acts = []
+    # batch_log_probs = []
+    # batch_rews = []
+    # batch_rtgs = []
+    # batch_lens = []
 
-    ep_rews = 0 
+    # ep_rews = 0 
     t = 0 
 
     while t < timesteps_per_batch: 
-        ep_rews = []
-        obs = [i.getField('translation') for i in population]
-        done = False
+        # ep_rews = []
+        # obs = [i.getField('translation') for i in population]
+        # done = False
 
-        for ep_t in range(max_timesteps_per_episode): 
-            t += 1 
+        run_seconds(max_timesteps_per_episode) # gather info from sim for each agent 
+        t += max_timesteps_per_episode
 
-            batch_obs.append[obs] # list of agent obs (positions)
+        # for ep_t in range(max_timesteps_per_episode): 
+        #     # would want to run sim for this time 
+        #     t += 1 
+            # batch_obs.append[obs] # list of agent obs (positions)
 
-            # request to calc action (for each agent)
-            msg = 'action-request'
-            emitter.send(msg.encode('utf-8'))
+            # # request to calc action (for each agent)
+            # msg = 'action-request'
+            # emitter.send(msg.encode('utf-8'))
 
         msg = 'episode-complete' # will reset agent 
         emitter.send(msg.encode('utf-8'))
@@ -408,7 +412,7 @@ def rollout():
         # TODO: reset env here correctly 
         regenerate_blocks(seed = 11)
 
-    return batch_obs, batch_acts, batch_log_probs, batch_lens # TODO: actually use these? 
+    # return batch_obs, batch_acts, batch_log_probs, batch_lens # TODO: actually use these? 
 
 
 
@@ -416,6 +420,7 @@ def rollout():
 def run_optimization():
     global robot_population_sizes
     global ind_sup
+    global updating 
     
     for size in robot_population_sizes:
         curr_size = size  
@@ -451,6 +456,7 @@ def run_optimization():
             # perform batch_rollout 
             rollout()
 
+            updating = True 
             msg = 'updating network'
             emitter.send(msg.encode('utf-8'))
 
@@ -460,9 +466,39 @@ def run_optimization():
             t_so_far += np.sum(batch_lens) # TODO: find way to extract this
 
             # TODO: need way to pause simulation while this calculation is happening 
+    
+    return 
 
-               
-         
+
+# runs simulation for designated amount of time 
+def run_seconds(t,waiting=False):
+    global pop_genotypes
+    global fitness_scores
+    global overall_fitness_scores
+    global updated
+    global fit_update 
+    global block_list
+    global start 
+    global prev_msg 
+    
+    n = TIME_STEP / 1000*32 # convert ms to s 
+    start = robot.getTime()
+    new_t = round(t, 1)
+    
+    while robot.step(TIME_STEP) != -1:
+        # run robot simulation for 30 seconds (if t = 30)
+        increments = TIME_STEP / 1000
+        
+        if robot.getTime() - start > new_t: 
+            msg = 'return_fitness'
+            # if prev_msg != msg: 
+            message_listener(robot.getTime()) # will clear out msg until next gen 
+            print('requesting fitness')
+            emitter.send('return_fitness'.encode('utf-8'))
+            prev_msg = msg 
+            # print('requesting fitness')
+            break 
+ 
     return 
 
 
@@ -474,49 +510,6 @@ main()
 
 
 # not useful code here 
-    
-# # runs simulation for designated amount of time 
-# def run_seconds(t,waiting=False):
-#     global pop_genotypes
-#     global fitness_scores
-#     global overall_fitness_scores
-#     global updated
-#     global fit_update 
-#     global block_list
-#     global start 
-#     global prev_msg 
-    
-#     n = TIME_STEP / 1000*32 # convert ms to s 
-#     start = robot.getTime()
-#     new_t = round(t, 1)
-    
-#     while robot.step(TIME_STEP) != -1:
-#         # run robot simulation for 30 seconds (if t = 30)
-#         increments = TIME_STEP / 1000
-        
-#         if robot.getTime() - start > new_t: 
-#             msg = 'return_fitness'
-#             # if prev_msg != msg: 
-#             message_listener(robot.getTime()) # will clear out msg until next gen 
-#             print('requesting fitness')
-#             emitter.send('return_fitness'.encode('utf-8'))
-#             prev_msg = msg 
-#             # print('requesting fitness')
-#             break 
-
-#         elif not waiting: 
-#             # constantly checking for messages from robots 
-#             message_listener(robot.getTime())
-                         
-#             if total_found == len(block_list):
-#                 msg = 'return_fitness'
-#                 # if prev_msg != msg: 
-#                 emitter.send('return_fitness'.encode('utf-8'))
-#                 prev_msg = msg 
-#                 # print('requesting fitness')
-#                 # print('collected all objects')
-#                 break      
-#     return 
    
 # # will use selected partners from each robot and reproduce with that corresponding index, and update population at the end of gen          
 # def update_geno_list(genotype_list): 

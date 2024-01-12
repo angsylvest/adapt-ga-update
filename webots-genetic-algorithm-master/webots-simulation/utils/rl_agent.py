@@ -12,6 +12,7 @@ class RLAgent():
         self.location = (0,0)
         self.reward = 0
         self.done = False
+        self.log_prob = 0
 
     def set_location(self, pos):
         self.location = pos

@@ -2,6 +2,7 @@ from controller import Supervisor, Node, Keyboard, Emitter, Receiver, Field
 import math 
 from robot_pop import * 
 import random
+import time 
 
 from utils.rl_agent import *
 from utils.ppo import * 
@@ -71,13 +72,17 @@ complete = True
 
 ep_rews = []
 ep_actions = []
-log_probs = []
+# log_probs = []
 batch_observations = []
 batch_rewards = []
 batch_actions = []
 batch_rtgs = []
 batch_lens = []
+batch_log_probs = []
 
+# time keeping 
+prev_time = robot.getTime()
+update_sec = 1 
 
 
 # based off given id of robot assigned 
@@ -125,6 +130,11 @@ def message_listener(time_step):
     global curr_action
     global complete 
 
+    global batch_rewards
+    global ep_rews
+    global batch_lens
+
+
     if receiver.getQueueLength()>0:
         message = receiver.getString()
         ## access to robot id for node acquisition    
@@ -147,22 +157,36 @@ def message_listener(time_step):
             curr_action = Agent.action
             action, log_prob = model.get_action()
 
-            if complete: log_probs.append(log_prob) 
+            Agent.action = action 
+            Agent.log_prob = log_prob
+
+            # if complete: batch_log_probs.append(log_prob) 
             curr_action = Agent.action if not complete else action # TODO: must do next action once done with previous
 
-            ep_actions.append(curr_action) 
+            # ep_actions.append(curr_action) 
 
             receiver.nextPacket()
 
         elif 'episode-complete' in message: 
-            # TODO: reset agent 
+            # TODO: reset agent + reset actions for agent
             Agent.reset() 
+            msg = 'episode-agent-complete'
+            emitter_individual.send(msg.encode('utf-8'))
+
+            batch_lens.append(600) # TODO: make more dynamic 
+            batch_rewards.append(ep_rews)
             
             receiver.nextPacket()
 
         elif 'updating-network' in message: 
             # TODO: make network update pause sim or stop further collection of statistics 
-            model.learn_adjusted(batch_observations, ep_actions, log_probs, batch_rtgs, batch_lens) # TODO: update 
+            batch_obs = torch.tensor(batch_obs, dtype = torch.float)
+            batch_acts = torch.tensor(batch_acts, dtype = torch.float)
+            batch_log_probs = torch.tensor(batch_log_probs, dtype = torch.float)
+            batch_rtgs = model.compute_rtgs(batch_rewards)
+            
+            
+            model.learn_adjusted(batch_observations, batch_acts, batch_log_probs, batch_rtgs, batch_lens) # TODO: update 
             msg = 'update-complete'
             emitter.send(msg.encode('utf-8'))
             
@@ -176,7 +200,21 @@ def message_listener(time_step):
         if 'action-complete' in message_individual: 
             obs, rew, done, _ = Agent.observation, Agent.reward, Agent.done
             ep_rews.append(rew)
+
+            # update action and tell agent to execute 
+            curr_action = Agent.action
+            action, log_prob = model.get_action()
+
+            Agent.action = action 
+            Agent.log_prob = log_prob
+
+            # if complete: batch_log_probs.append(log_prob) 
+            curr_action = Agent.action if not complete else action # TODO: must do next action once done with previous
+            msg = f'agent_action:{curr_action}'
+            emitter_individual.send(msg.encode('utf-8'))
+
             receiver_individual.nextPacket()
+
         else: 
             # print('indiviudal msgs --', message_individual)
             receiver_individual.nextPacket()
@@ -184,7 +222,24 @@ def message_listener(time_step):
 
 # TODO: make adjusted function for batch_obs, back_acts, batch_log_probs, batch_rtgs, batch_lens
      
-    
+def update_batch_info():
+    global prev_time
+    global update_sec
+
+    global batch_observations
+    global batch_actions
+    global ep_rews
+    global batch_log_probs 
+
+    if robot.getTime() - prev_time > update_sec: # update every second 
+        prev_time = robot.getTime()
+        # update info 
+        batch_observations.append(Agent.observation)
+        batch_actions.append(Agent.action)
+        ep_rews.append(Agent.reward)
+        batch_log_probs.append(Agent.log_prob)
+
+
 def run_optimization():
     global updated
     global total_found 
@@ -194,7 +249,8 @@ def run_optimization():
     global timestep 
     
     while robot.step(timestep) != -1: 
-        message_listener(timestep)        
+        message_listener(timestep)    
+        update_batch_info()    
      
   
 def main(): 
