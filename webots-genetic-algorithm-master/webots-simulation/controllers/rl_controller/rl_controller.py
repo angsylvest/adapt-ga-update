@@ -146,7 +146,7 @@ remove_orientations = []
 
 # rl relevant information for agent 
 observation = []
-curr_action = ""
+curr_action = []
 reward = 0 
 
 # calculates angle normal to current orientation 
@@ -329,7 +329,8 @@ def interpret(timestep):
             # TODO: fill out with valid reset to agent actions
 
         elif 'agent_action' in message: 
-            curr_action = message.split(":")[-1]
+            curr_action = [int(message.split(":")[-1].split(",")[0]), int(message.split(":")[-1].split(",")[1])]
+            print(f'recieved new action - {curr_action}')
             receiver_individual.nextPacket()
             
         else: 
@@ -401,8 +402,9 @@ while robot.step(timestep) != -1 and sim_complete != True:
 
         # do action sequence 
         cd_x, cd_y = float(gps.getValues()[0]), float(gps.getValues()[1])
-        goal_posx, goal_posy = curr_action[0] + cd_x, curr_action[0] + cd_y # TODO: not correct, but logic is there 
-        if not holding_something and not reversing and not moving_forward: 
+        # print(f'curr action {curr_action}')
+        if not holding_something and not reversing and not moving_forward and curr_action != []: 
+            goal_posx, goal_posy = curr_action[0] + cd_x, curr_action[0] + cd_y # TODO: not correct, but logic is there 
             if math.dist([cd_x, cd_y], [goal_posx,goal_posy]) > 0.05:  
                 chosen_direction = round(math.atan2(-cd_y,-cd_x),2) 
             else: # request new action 
@@ -503,10 +505,10 @@ while robot.step(timestep) != -1 and sim_complete != True:
                             if prev_msg != id: 
                                 emitter.send(str(id).encode('utf-8'))
                                 prev_msg = id 
-                        else: 
-                            time_elapsed_since_block += 1 # on a per sec basis    
-                    else: 
-                        time_elapsed_since_block += 1 # on a per sec basis 
+                        # else: 
+                            # time_elapsed_since_block += 1 # on a per sec basis    
+                    # else: 
+                        # time_elapsed_since_block += 1 # on a per sec basis 
         i+=1
             
         pass

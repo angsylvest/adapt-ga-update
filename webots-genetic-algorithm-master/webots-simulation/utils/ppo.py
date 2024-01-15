@@ -13,16 +13,22 @@ from torch.distributions import MultivariateNormal
 class PPO():
     def __init__(self, policy_class, env, **hyperparameters):
         # validate that env is compatible (most likely gym)
-        assert(type(env.observation_space) == gym.spaces.Box)
-        assert(type(env.action_space) == gym.spaces.Box)
+        
+        print(f'PPO env type {type(env.observation_space[0])}')
+        print(f'PPO action space {type(env.action_space[0])}')
+        assert(type(env.observation_space[0]) == gym.spaces.Dict)
+        assert(type(env.action_space[0]) == gym.spaces.Discrete)
 
         # initialize hyperparameters 
         self._init_hyperparameters(hyperparameters)
 
         # extract env info 
         self.env = env 
-        self.obs_dim = env.observation_space.shape[0]
-        self.act_dim = env.action_space.shape[0]
+        # self.obs_dim = env.observation_space[0].shape[0]
+        self.obs_dim = env.observation_space[0]["agent"].shape[0] # + env.observation_space[0]["target"].shape[0]
+        
+        # self.act_dim = env.action_space[0].shape[0]
+        self.act_dim = env.action_space[0].n # is 4 now
 
         # initialize actor and critic 
         self.actor = policy_class(self.obs_dim, self.act_dim)
@@ -235,7 +241,7 @@ class PPO():
         
 
     def get_action(self, obs): 
-        # query from actor network 
+        # query from actor network  
         mean = self.actor(obs)
 
         dist = MultivariateNormal(mean, self.cov_mat)
@@ -247,7 +253,7 @@ class PPO():
         log_prob = dist.log_prob(action)
 
         # returned sample action + log probability 
-        return action.detach().numpy, log_prob.detach()
+        return action.detach().numpy(), log_prob.detach()
     
 
     def evaluate(self, batch_obs, batch_acts):

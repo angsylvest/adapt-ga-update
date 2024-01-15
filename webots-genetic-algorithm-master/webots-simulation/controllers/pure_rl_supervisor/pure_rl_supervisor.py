@@ -3,12 +3,11 @@ import math
 from robot_pop import * 
 import random
 
-from utils.rl_agent import *
-
 # ensure that we can access utils package to streamline tasks 
 import sys 
 sys.path.append('../../')
 import utils.environment as env_mod 
+from utils.rl_agent import *
 
 from math import pi
 
@@ -70,10 +69,10 @@ high_dense = True
 
 
 # # statistics collected 
-# population = []
+population = []
 # found_list = []
 # total_found = 0
-# block_list = []
+block_list = []
 # reproduce_list = []
 r_pos_to_generate = []
 b_pos_to_generate = []
@@ -117,10 +116,10 @@ def generate_robot_central(num_robots):
     global population_array
 
     curr_msg = str("size-" + str(num_robots))
-    if curr_msg != prev_msg: 
-        emitter.send(str("size-" + str(num_robots)).encode('utf-8'))
-        emitter_individual.send(str("size-" + str(num_robots)).encode('utf-8'))
-        prev_msg = curr_msg
+    # if curr_msg != prev_msg: 
+    emitter.send(str("size-" + str(num_robots)).encode('utf-8'))
+    emitter_individual.send(str("size-" + str(num_robots)).encode('utf-8'))
+    prev_msg = curr_msg
     
     if len(population) != 0: 
     
@@ -143,7 +142,7 @@ def generate_robot_central(num_robots):
             robot_name = "k0(" + str(i) + ")"
         
         # Import the khepera PROTO with a dynamically set robot name
-        import_string = 'khepera {{ robotName "{0}" }}'.format(robot_name)
+        import_string = 'khepera_pure_rl {{ robotName "{0}" }}'.format(robot_name)
         rootChildrenField.importMFNodeFromString(-1, import_string)
         rec_node = rootChildrenField.getMFNode(-1)
         t_field = rec_node.getField('translation')
@@ -199,7 +198,7 @@ def generate_robot_edge(num_robots, right = False):
             robot_name = "k0(" + str(i) + ")"
         
         # Import the khepera PROTO with a dynamically set robot name
-        import_string = 'khepera {{ robotName "{0}" }}'.format(robot_name)
+        import_string = 'khepera_pure_rl {{ robotName "{0}" }}'.format(robot_name)
         rootChildrenField.importMFNodeFromString(-1, import_string)
         rec_node = rootChildrenField.getMFNode(-1)
         
@@ -440,7 +439,7 @@ def run_optimization():
             rootChildrenField = rootNode.getField('children')
             robot_name = "Tinkerbots(" + str(i) + ")"
             # Import the khepera PROTO with a dynamically set robot name
-            import_string = 'khepera_individual {{ robotName "{0}" }}'.format(robot_name)
+            import_string = 'khepera_individual_pure_rl {{ robotName "{0}" }}'.format(robot_name)
             rootChildrenField.importMFNodeFromString(-1, import_string)
             individual = rootChildrenField.getMFNode(-1)
             ind_sup.append(individual)

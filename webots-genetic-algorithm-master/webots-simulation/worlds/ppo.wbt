@@ -4,9 +4,9 @@ IMPORTABLE EXTERNPROTO "../protos/TinkerbotsBase.proto"
 EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2023b/projects/objects/backgrounds/protos/TexturedBackgroundLight.proto"
 EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2023b/projects/objects/backgrounds/protos/TexturedBackground.proto"
 EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2023b/projects/objects/floors/protos/RectangleArena.proto"
-IMPORTABLE EXTERNPROTO "../protos/khepera.proto"
-IMPORTABLE EXTERNPROTO "../protos/khepera_individual.proto"
 IMPORTABLE EXTERNPROTO "../protos/block.proto"
+IMPORTABLE EXTERNPROTO "../protos/khepera_individual_pure_rl.proto"
+IMPORTABLE EXTERNPROTO "../protos/khepera_pure_rl.proto"
 
 WorldInfo {
   info [
@@ -53,7 +53,7 @@ DEF arena RectangleArena {
 DEF supervisor TinkerbotsBase {
   translation -0.40999980681570314 -2.3281555732779615e-19 0.020493765715755057
   rotation 1.5217976059830952e-12 1 -7.829335443931267e-13 4.694645743352563e-06
-  controller "ga_updated_supervisor"
+  controller "pure_rl_supervisor"
   supervisor TRUE
   extensionSlot [
     Emitter {

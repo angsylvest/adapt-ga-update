@@ -4,6 +4,8 @@ from robot_pop import *
 import random
 import time 
 
+import sys 
+sys.path.append('../../')
 from utils.rl_agent import *
 from utils.ppo import * 
 from utils.nn import * 
@@ -33,8 +35,8 @@ timestep = int(robot.getBasicTimeStep())
 given_id = int(robot.getName()[11:-1])
 assigned_r_name = "k0" if given_id == 0 else "k0(" + str(given_id) + ")" 
 Agent = RLAgent()
-Agent.set_id(assigned_r_name)
-Agent.set_location((population[given_id].getPosition()[0], population[given_id].getPosition()[1]))
+# Agent.set_id(assigned_r_name)
+# Agent.set_location((population[given_id].getPosition()[0], population[given_id].getPosition()[1]))
 
 # individual PPO model for each agent 
 hyperparamters = {}
@@ -67,7 +69,6 @@ curr_fitness = 0
 child = ""
 
 comparing_genes = False 
-curr_action = []
 complete = True 
 
 ep_rews = []
@@ -128,6 +129,7 @@ def message_listener(time_step):
     global batch_rewards
     global ep_rews
     global batch_lens
+    global Agent
 
 
     if receiver.getQueueLength()>0:
@@ -141,6 +143,20 @@ def message_listener(time_step):
                 node = robot.getFromId(int(id))
                 population.append(node)
                 
+            Agent.set_id(assigned_r_name)
+            Agent.set_location((population[given_id].getPosition()[0], population[given_id].getPosition()[1]))
+            
+            # set action for corresponding robot 
+            pos = np.array([population[given_id].getPosition()[0], population[given_id].getPosition()[1]])
+            curr_action, log_probs = model.get_action(pos)
+            discretized_action = np.argmax(curr_action).item() # TODO: might not be correct, index of the maximum value in your continuous vector as a discrete action
+            curr_action = env._action_to_direction[discretized_action]
+            Agent.action = curr_action 
+            # print(f'initial action for agent {assigned_r_name} with action : {curr_action}')
+
+            msg = 'agent_action:'+ str(curr_action[0]) + "," + str(curr_action[1])
+            emitter_individual.send(msg.encode('utf-8'))
+                
             receiver.nextPacket() 
             
         elif 'size' in message: 
@@ -151,6 +167,7 @@ def message_listener(time_step):
         elif 'action-request' in message: 
             curr_action = Agent.action
             action, log_prob = env._action_to_direction(model.get_action())
+            Agent.set_location((population[given_id].getPosition()[0], population[given_id].getPosition()[1]))
 
             Agent.action = action 
             Agent.log_prob = log_prob
@@ -194,19 +211,25 @@ def message_listener(time_step):
 
         if 'action-complete' in message_individual: 
             Agent.reward = message_individual.split(":")[-1]
-            obs, rew, done, _ = Agent.observation, Agent.reward, Agent.done
+            obs, rew, done = Agent.observation, Agent.reward, Agent.done
             ep_rews.append(rew)
 
             # update action and tell agent to execute 
-            curr_action = Agent.action
-            action, log_prob = model.get_action()
+            # curr_action = Agent.action  
+            pos = np.array([population[given_id].getPosition()[0], population[given_id].getPosition()[1]])
+            Agent.set_location((population[given_id].getPosition()[0], population[given_id].getPosition()[1])) 
+            action, log_prob = model.get_action(pos) 
+            
+            discretized_action = np.argmax(action).item() # TODO: might not be correct, index of the maximum value in your continuous vector as a discrete action
+            curr_action = env._action_to_direction[discretized_action]
+            Agent.action = curr_action 
 
-            Agent.action = env._action_to_direction(action).tolist() 
-            Agent.log_prob = log_prob
+            # Agent.action = env._action_to_direction(action).tolist() 
+            Agent.log_prob = log_prob 
 
             # if complete: batch_log_probs.append(log_prob) 
-            curr_action = Agent.action if not complete else action # TODO: must do next action once done with previous
-            msg = f'agent_action:{curr_action}'
+            # curr_action = Agent.action if not complete else action # TODO: must do next action once done with previous
+            msg = 'agent_action:'+ str(curr_action[0]) + "," + str(curr_action[1])
             emitter_individual.send(msg.encode('utf-8'))
             receiver_individual.nextPacket()
 

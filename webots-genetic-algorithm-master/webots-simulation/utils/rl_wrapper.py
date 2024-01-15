@@ -4,10 +4,10 @@ from matplotlib import pyplot as plt
 import pygame
 import numpy as np
 
-import rl_agent
+from utils.rl_agent import *
 
-from ppo import * 
-from nn import * 
+from utils.ppo import * 
+from utils.nn import * 
 
 class ForagingEnv(gym.Env):
     metadata = {"render_modes": ["human", "rgb_array"], "render_fps": 4}
@@ -18,11 +18,18 @@ class ForagingEnv(gym.Env):
 
         self.num_agents = num_agents
 
+        # self._action_to_direction = {
+            # 0: np.array([1, 0]),
+            # 1: np.array([0, 1]),
+            # 2: np.array([-1, 0]),
+            # 3: np.array([0, -1]),
+        # }
+        
         self._action_to_direction = {
-            0: np.array([1, 0]),
-            1: np.array([0, 1]),
-            2: np.array([-1, 0]),
-            3: np.array([0, -1]),
+            0: [1, 0],
+            1: [0, 1],
+            2: [-1, 0],
+            3: [0, -1],
         }
 
         self.agent_list = []
@@ -33,7 +40,7 @@ class ForagingEnv(gym.Env):
 
         for i in range(num_agents):
 
-            agent = rl_agent.RLAgent()
+            agent = RLAgent()
             self.agent_list.append(agent)
 
             self.action_space.append(spaces.Discrete(4))
