@@ -149,9 +149,8 @@ def message_listener(time_step):
             # set action for corresponding robot 
             pos = np.array([population[given_id].getPosition()[0], population[given_id].getPosition()[1]])
             curr_action, log_probs = model.get_action(pos)
-            print(f'initial action for agent {assigned_r_name} with action : {curr_action} for {type(curr_action)}')
-            # discretized_action = np.argmax(curr_action).item() # TODO: might not be correct, index of the maximum value in your continuous vector as a discrete action
-            curr_action = env._action_to_direction[int(curr_action[0])]
+            discretized_action = np.argmax(curr_action).item() # TODO: might not be correct, index of the maximum value in your continuous vector as a discrete action
+            curr_action = env._action_to_direction[discretized_action]
             Agent.action = curr_action 
             # print(f'initial action for agent {assigned_r_name} with action : {curr_action}')
 
@@ -166,19 +165,12 @@ def message_listener(time_step):
             receiver.nextPacket()
 
         elif 'action-request' in message: 
-            pos = np.array([population[given_id].getPosition()[0], population[given_id].getPosition()[1]])
-            action, log_prob = env._action_to_direction(model.get_action(pos))
+            curr_action = Agent.action
+            action, log_prob = env._action_to_direction(model.get_action())
             Agent.set_location((population[given_id].getPosition()[0], population[given_id].getPosition()[1]))
 
             Agent.action = action 
             Agent.log_prob = log_prob
-            
-            curr_action = Agent.action
-            
-            msg = 'agent_action:'+ str(curr_action[0]) + "," + str(curr_action[1])
-            emitter_individual.send(msg.encode('utf-8'))
-            
-            print(f'after action-request action for agent {assigned_r_name} with action : {curr_action}')
 
             # if complete: batch_log_probs.append(log_prob) 
             curr_action = Agent.action if not complete else action # TODO: must do next action once done with previous

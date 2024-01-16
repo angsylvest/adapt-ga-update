@@ -244,8 +244,11 @@ class PPO():
         # query from actor network  
         mean = self.actor(obs)
 
-        dist = MultivariateNormal(mean, self.cov_mat)
-
+        # dist = MultivariateNormal(mean, self.cov_mat)
+        
+        # create a categorical distribution
+        dist = torch.distributions.Categorical(logits=mean)
+        
         # sample action from distribution 
         action = dist.sample()
 

@@ -1,0 +1,30 @@
+#VRML_SIM R2023b utf8
+PROTO khepera_individual_hybrid_rl [
+  field SFVec3f    translation  0 0 0
+  field SFRotation rotation     0 0 1 0
+  # field SFFloat    bodyMass     1
+  field SFString   robotName    "Tinkerbots"
+]
+
+{
+  TinkerbotsBase {
+    translation IS translation
+    rotation IS rotation
+    name IS robotName
+    # bodyMass IS bodyMass
+    controller "hybrid_rl_individual_supervisor"
+    supervisor TRUE
+    extensionSlot [
+      Receiver {
+        name "receiver_processor"
+        channel 20
+      }
+      Receiver {
+        channel 5
+      }
+      Emitter {
+        channel 19
+      }
+    ]
+  }
+}
