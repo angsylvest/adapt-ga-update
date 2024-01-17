@@ -84,6 +84,8 @@ batch_log_probs = []
 # time keeping 
 prev_time = robot.getTime()
 update_sec = 1 
+num_updates_per_episode = 600 # 1 per second 
+curr_index = 0
 
 
 # based off given id of robot assigned 
@@ -130,6 +132,7 @@ def message_listener(time_step):
     global ep_rews
     global batch_lens
     global Agent
+    global curr_index
 
 
     if receiver.getQueueLength()>0:
@@ -200,14 +203,24 @@ def message_listener(time_step):
 
         elif 'updating-network' in message: 
             # TODO: make network update pause sim or stop further collection of statistics 
-            batch_obs = torch.tensor(batch_obs, dtype = torch.float)
+            batch_observations = torch.tensor(batch_observations, dtype = torch.float)
             batch_acts = torch.tensor(batch_acts, dtype = torch.float)
             batch_log_probs = torch.tensor(batch_log_probs, dtype = torch.float)
             batch_rtgs = model.compute_rtgs(batch_rewards)
+            batch_lens = [] # TODO: update so correct 
             
             
             model.learn_adjusted(batch_observations, batch_acts, batch_log_probs, batch_rtgs, batch_lens) # TODO: update 
             msg = 'update-complete'
+
+            # reset each batch 
+            batch_observations = []
+            batch_acts = []
+            ep_rews = []
+            batch_log_probs = [] 
+            batch_lens = [] 
+            curr_index = 0
+
             emitter.send(msg.encode('utf-8'))
             
         else: 
@@ -258,7 +271,9 @@ def update_batch_info():
     global ep_rews
     global batch_log_probs 
 
-    if robot.getTime() - prev_time > update_sec: # update every second 
+    global curr_index 
+
+    if robot.getTime() - prev_time > update_sec and curr_index <= num_updates_per_episode: # update every second 
         prev_time = robot.getTime()
         # update info 
         batch_observations.append(population[given_id].getPosition())

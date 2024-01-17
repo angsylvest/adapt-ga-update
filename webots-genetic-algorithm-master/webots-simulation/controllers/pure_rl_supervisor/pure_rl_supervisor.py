@@ -109,7 +109,6 @@ curr_env = env_mod.Environment(env_type=env_type, seed = seed_val)
 # set up environments 
 def generate_robot_central(num_robots):
     global population
-    global columns 
     global r_pos_to_generate
     global prev_msg 
     global id_msg

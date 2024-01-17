@@ -1,7 +1,7 @@
 import numpy as np 
 # relevant calculations 
 
-def shannon_entropy(p):
+def shannon_entropy(p): # assuming p is numpy array 
     return -np.sum(np.where(p != 0, p * np.log2(p), 0))
 
 def kl_divergence(p, q): # assuming p and q are numpy arrays (discrete)
