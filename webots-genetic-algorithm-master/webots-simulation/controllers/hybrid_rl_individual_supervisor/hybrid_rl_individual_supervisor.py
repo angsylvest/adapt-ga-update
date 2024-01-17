@@ -11,6 +11,9 @@ from utils.ppo import *
 from utils.nn import * 
 from utils.rl_wrapper import * 
 
+# ideally would have global env variable available here 
+from controllers.hybrid_rl_supervisor.hybrid_rl_supervisor import grid_env 
+
 """
 Main supervisor base 
 Optimization algorithm - Collaboration-oriented 

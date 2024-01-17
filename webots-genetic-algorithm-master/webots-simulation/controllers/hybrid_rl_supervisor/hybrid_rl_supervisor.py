@@ -10,6 +10,7 @@ import utils.environment as env_mod
 from utils.rl_agent import *
 
 from math import pi
+from map_info import * 
 
 """
 Main supervisor base 
@@ -36,6 +37,8 @@ clip = 0.2
 total_timesteps = 200_000_000
 act_list = []
 updating = True
+
+grid_env = MapInfo() # include more info if necessary 
 
 # columns = 'agent id' + ',time step' + ',fitness' + ',xpos'+ ',ypos' + ',num col' + ',genotype' + ',potential time'
 

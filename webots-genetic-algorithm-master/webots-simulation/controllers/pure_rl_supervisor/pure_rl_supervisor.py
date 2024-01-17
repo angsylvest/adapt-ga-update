@@ -8,8 +8,12 @@ import sys
 sys.path.append('../../')
 import utils.environment as env_mod 
 from utils.rl_agent import *
+from utils.ppo import * 
+from utils.nn import * 
+from utils.rl_wrapper import * 
 
 from math import pi
+from utils.global_var import ex
 
 """
 Main supervisor base 
@@ -44,7 +48,7 @@ updating = True
 
 # # genetic algorithm-specific parameters 
 # num_generations = 10
-# simulation_time = 30
+simulation_time = 30
 # trials = 25
 # curr_trial = 0 
 robot_population_sizes = [1]
@@ -105,6 +109,12 @@ central = True
 
 # # generate envs 
 curr_env = env_mod.Environment(env_type=env_type, seed = seed_val)
+
+# individual PPO model for each agent 
+hyperparamters = {}
+env = ForagingEnv()
+model = PPO(FeedForwardNN, env, **hyperparamters)
+
 
 # set up environments 
 def generate_robot_central(num_robots):
@@ -300,7 +310,7 @@ def calc_normal(curr_angle):
         return round(-1*round(pi/2, 2),2)
 
             
-def message_listener():
+def message_listener(time_step):
     global total_found 
     global collected_count 
     global found_list
@@ -313,10 +323,15 @@ def message_listener():
     global simulation_time
     global prev_msg 
     global updating
+    
+    from utils.global_var import ex
+    
+    
+    print('supervisor msgs --', ex) 
 
     if receiver.getQueueLength()>0 and (robot.getTime() - start < simulation_time):
         # message = receiver.getData().decode('utf-8')
-        # print('supervisor msgs --', message) 
+        print('supervisor msgs --', ex) 
         message = receiver.getString()
         
         if message[0] == "$": # handles deletion of objects when grabbed
@@ -479,6 +494,7 @@ def run_seconds(t,waiting=False):
     global start 
     global prev_msg 
     
+    
     n = TIME_STEP / 1000*32 # convert ms to s 
     start = robot.getTime()
     new_t = round(t, 1)
@@ -487,14 +503,16 @@ def run_seconds(t,waiting=False):
         # run robot simulation for 30 seconds (if t = 30)
         increments = TIME_STEP / 1000
         
+        message_listener(robot.getTime()) # will clear out msg until next gen 
+        
         if robot.getTime() - start > new_t: 
             msg = 'return_fitness'
             # if prev_msg != msg: 
-            message_listener(robot.getTime()) # will clear out msg until next gen 
+            # message_listener(robot.getTime()) # will clear out msg until next gen 
             print('requesting fitness')
             emitter.send('return_fitness'.encode('utf-8'))
             prev_msg = msg 
-            # print('requesting fitness')
+            print('requesting fitness')
             break 
  
     return 

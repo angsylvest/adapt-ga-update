@@ -17,6 +17,7 @@ import random
 import sys 
 sys.path.append('../../')
 import utils
+from utils.global_var import *
 
 # create the Robot instance.
 robot = Robot()

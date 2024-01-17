@@ -11,6 +11,9 @@ from utils.ppo import *
 from utils.nn import * 
 from utils.rl_wrapper import * 
 
+# from controllers.pure_rl_supervisor.pure_rl_supervisor import ex
+from utils.global_var import ex
+
 """
 Main supervisor base 
 Optimization algorithm - Collaboration-oriented 
@@ -87,6 +90,8 @@ update_sec = 1
 num_updates_per_episode = 600 # 1 per second 
 curr_index = 0
 
+print(f'initial x {ex}')
+
 
 # based off given id of robot assigned 
 def find_nearest_robot_genotype(r_index):
@@ -133,6 +138,8 @@ def message_listener(time_step):
     global batch_lens
     global Agent
     global curr_index
+    
+    from utils.global_var import ex
 
 
     if receiver.getQueueLength()>0:
@@ -159,6 +166,10 @@ def message_listener(time_step):
             # print(f'initial action for agent {assigned_r_name} with action : {curr_action}')
 
             msg = 'agent_action:'+ str(curr_action[0]) + "," + str(curr_action[1])
+            
+            ex = [1,2]
+            
+            print(f'updated global ex {ex}')
             emitter_individual.send(msg.encode('utf-8'))
                 
             receiver.nextPacket() 
