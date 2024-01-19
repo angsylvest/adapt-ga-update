@@ -413,7 +413,8 @@ while robot.step(timestep) != -1 and sim_complete != True:
             if math.dist([cd_x, cd_y], [goal_posx,goal_posy]) > 0.05:  
                 chosen_direction = round(math.atan2(goal_posy-cd_y,goal_posx-cd_x),2) 
             else: # request new action 
-                msg = f'action-complete:{reward}'
+                rew = reward()
+                msg = f'action-complete:{rew}'
                 emitter_individual.send(msg.encode('utf-8'))
     
         roll, pitch, yaw = inertia.getRollPitchYaw()

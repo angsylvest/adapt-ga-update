@@ -132,6 +132,10 @@ def message_listener(time_step):
     global complete 
 
     global batch_rewards
+    global batch_observations
+    global batch_log_probs
+    global batch_lens
+    global batch_rtgs
     global ep_rews
     global batch_lens
     global Agent
@@ -159,7 +163,7 @@ def message_listener(time_step):
             # discretized_action = np.argmax(curr_action).item() # TODO: might not be correct, index of the maximum value in your continuous vector as a discrete action
             curr_action = env._action_to_direction[int(curr_action[0])]
             Agent.action = curr_action 
-            # print(f'initial action for agent {assigned_r_name} with action : {curr_action}')
+            print(f'initial action for agent {assigned_r_name} with action : {curr_action} and agent reward {Agent.reward}')
 
             msg = 'agent_action:'+ str(curr_action[0]) + "," + str(curr_action[1])
             
@@ -199,6 +203,8 @@ def message_listener(time_step):
             Agent.reset() 
             msg = 'episode-agent-complete'
             emitter_individual.send(msg.encode('utf-8'))
+            
+            print('episode complete')
 
             batch_lens.append(600) # TODO: make more dynamic 
             batch_rewards.append(ep_rews)
@@ -207,23 +213,49 @@ def message_listener(time_step):
 
         elif 'updating-network' in message: 
             # TODO: make network update pause sim or stop further collection of statistics 
+            print('updating network')
+            # batch_observations = torch.tensor(batch_observations, dtype = torch.float)
+            # batch_actions = torch.tensor(batch_acts, dtype = torch.float)
+            # batch_log_probs = torch.tensor(batch_log_probs, dtype = torch.float)
+            # batch_rtgs = model.compute_rtgs(batch_rewards)
+            # batch_lens = [] # TODO: update so correct 
+            
+            
+            # model.learn_adjusted(batch_observations, batch_acts, batch_log_probs, batch_rtgs, batch_lens) # TODO: update 
+            # msg = 'update-complete'
+
+            # reset each batch 
+            # batch_observations = []
+            # batch_actions = []
+            # ep_rews = []
+            # batch_log_probs = [] 
+            # batch_lens = [] 
+            # curr_index = 0
+            
+            # TODO: need to make work across episodes updated code with corrections 
             batch_observations = torch.tensor(batch_observations, dtype = torch.float)
-            batch_acts = torch.tensor(batch_acts, dtype = torch.float)
+            batch_acts = torch.tensor(batch_actions, dtype = torch.float)
             batch_log_probs = torch.tensor(batch_log_probs, dtype = torch.float)
-            batch_rtgs = model.compute_rtgs(batch_rewards)
-            batch_lens = [] # TODO: update so correct 
+            print('intial batch_rewards - ', batch_rewards)
+            # batch_rewards.append(ep_rews)
+            print('final batch_rewards - ', batch_rewards)
+            batch_rtgs = model.compute_rtgs(batch_rewards) # TODO: should be batch_rewards instead of ep_rews
+            batch_lens = [600] # TODO: update so correct 
+            print('converted to torch')
+            print(f'info updates : \n batch_observations: {batch_observations} \n batch_actions: {batch_acts} \n ep_rews: {ep_rews} \n batch_rtgs: {batch_rtgs}') 
             
             
             model.learn_adjusted(batch_observations, batch_acts, batch_log_probs, batch_rtgs, batch_lens) # TODO: update 
-            msg = 'update-complete'
-
+            print('updated model')
+            
             # reset each batch 
             batch_observations = []
-            batch_acts = []
+            batch_actions = []
             ep_rews = []
             batch_log_probs = [] 
             batch_lens = [] 
             curr_index = 0
+            batch_rewards = []
 
             emitter.send(msg.encode('utf-8'))
             
@@ -235,9 +267,9 @@ def message_listener(time_step):
         message_individual = receiver_individual.getString()
 
         if 'action-complete' in message_individual: 
-            Agent.reward = message_individual.split(":")[-1]
+            Agent.reward = float(message_individual.split(":")[-1])
             obs, rew, done = Agent.observation, Agent.reward, Agent.done
-            ep_rews.append(rew)
+            # ep_rews.append(rew)
 
             # update action and tell agent to execute 
             # curr_action = Agent.action  
@@ -274,17 +306,47 @@ def update_batch_info():
     global batch_actions
     global ep_rews
     global batch_log_probs 
+    global batch_rewards
 
     global curr_index 
+   
 
     if robot.getTime() - prev_time > update_sec and curr_index <= num_updates_per_episode: # update every second 
         prev_time = robot.getTime()
+        print(f'batch_observations: {batch_observations}')
         # update info 
-        batch_observations.append(population[given_id].getPosition())
+        batch_observations.append((population[given_id].getPosition()[0], population[given_id].getPosition()[1]))
         batch_actions.append(Agent.action)
         ep_rews.append(Agent.reward)
         batch_log_probs.append(Agent.log_prob)
+        print(f'info updates : \n batch_observations: {batch_observations} \n batch_actions: {batch_actions} \n ep_rews: {ep_rews}') 
 
+        # TODO: delete eventually .. testing network update 
+        if len(batch_observations) > 0: 
+            batch_observations = torch.tensor(batch_observations, dtype = torch.float)
+            batch_acts = torch.tensor(batch_actions, dtype = torch.float)
+            batch_log_probs = torch.tensor(batch_log_probs, dtype = torch.float)
+            print('intial batch_rewards - ', batch_rewards)
+            batch_rewards.append(ep_rews)
+            print('final batch_rewards - ', batch_rewards)
+            batch_rtgs = model.compute_rtgs(batch_rewards) # TODO: should be batch_rewards instead of ep_rews
+            batch_lens = [600] # TODO: update so correct 
+            print('converted to torch')
+            print(f'info updates : \n batch_observations: {batch_observations} \n batch_actions: {batch_acts} \n ep_rews: {ep_rews} \n batch_rtgs: {batch_rtgs}') 
+            
+            
+            model.learn_adjusted(batch_observations, batch_acts, batch_log_probs, batch_rtgs, batch_lens) # TODO: update 
+            print('updated model')
+            
+            # reset each batch 
+            batch_observations = []
+            batch_actions = []
+            ep_rews = []
+            batch_log_probs = [] 
+            batch_lens = [] 
+            curr_index = 0
+            batch_rewards = []
+        
 
 def run_optimization():
     global updated

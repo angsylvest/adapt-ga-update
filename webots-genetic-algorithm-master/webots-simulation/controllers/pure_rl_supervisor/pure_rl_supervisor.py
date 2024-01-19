@@ -323,14 +323,8 @@ def message_listener(time_step):
     global prev_msg 
     global updating
     
-    from utils.global_var import ex
-    
-    
-    print('supervisor msgs --', ex) 
-
     if receiver.getQueueLength()>0 and (robot.getTime() - start < simulation_time):
         # message = receiver.getData().decode('utf-8')
-        print('supervisor msgs --', ex) 
         message = receiver.getString()
         
         if message[0] == "$": # handles deletion of objects when grabbed
