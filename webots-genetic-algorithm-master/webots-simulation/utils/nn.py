@@ -46,7 +46,7 @@ class FeedForwardNN(nn.Module):
 			obs = torch.tensor(obs, dtype=torch.float)
 			
 		if len(obs.shape) == 1:
-                                  obs = obs.unsqueeze(0) # add batch channel if just using one observation 
+			obs = obs.unsqueeze(0) # add batch channel if just using one observation 
 
 		activation1 = F.relu(self.layer1(obs))
 		activation2 = F.relu(self.layer2(activation1))

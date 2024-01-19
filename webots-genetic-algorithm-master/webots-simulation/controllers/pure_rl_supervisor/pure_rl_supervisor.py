@@ -13,7 +13,6 @@ from utils.nn import *
 from utils.rl_wrapper import * 
 
 from math import pi
-from utils.global_var import ex
 
 """
 Main supervisor base 
