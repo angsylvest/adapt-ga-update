@@ -129,9 +129,9 @@ class PPO():
         self.logger['i_so_far'] = i_so_far
 
         # calc advantage at k-th iteration 
-        print(f'in evaluate() batch_obs: {batch_obs} and batch_acts: {batch_acts}')
+        # print(f'in evaluate() batch_obs: {batch_obs} and batch_acts: {batch_acts}')
         V, _ = self.evaluate(batch_obs, batch_acts)
-        print(f'batch_rtgs: {batch_rtgs} and V.detach(): {V.detach()}')
+        # print(f'batch_rtgs: {batch_rtgs} and V.detach(): {V.detach()}')
         A_k = batch_rtgs - V.detach() # diff between observed and estimated return 
 
 
@@ -145,7 +145,7 @@ class PPO():
             ratios = torch.exp(curr_log_probs - batch_log_probs)
 
             # calc surrogate losses 
-            print(f'surrogate loss params: \n ratios: {ratios} and A_k: {A_k}')
+            # print(f'surrogate loss params: \n ratios: {ratios} and A_k: {A_k}')
             surr1 = ratios * A_k
             surr2 = torch.clamp(ratios, 1- self.clip, 1 + self.clip) * A_k
 
@@ -270,17 +270,17 @@ class PPO():
         batch_acts shape: (num ts in batch, dim of action)
         """
         V = self.critic(batch_obs).squeeze() # should be same size as batch_rtgs
-        print(f'critic output from evaluate(): {V}')
+        # print(f'critic output from evaluate(): {V}')
 
         # calc log probabilities 
         mean = self.actor(batch_obs)
-        print(f'mean from self.actor: {mean}')
+        # print(f'mean from self.actor: {mean}')
         # dist = MultivariateNormal(mean, self.cov_mat)
         
         dist = torch.distributions.Categorical(logits=mean)
-        print(f'dist output: {dist}')
+        # print(f'dist output: {dist}')
         log_probs = dist.log_prob(batch_acts)
-        print(f'log probs from evaluate(): {log_probs}')
+        # print(f'log probs from evaluate(): {log_probs}')
 
         # return value vector of each obs in batch + log probs 
         return V, log_probs

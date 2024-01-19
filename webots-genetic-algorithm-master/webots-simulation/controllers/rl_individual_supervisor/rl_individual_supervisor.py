@@ -208,6 +208,7 @@ def message_listener(time_step):
 
             batch_lens.append(600) # TODO: make more dynamic 
             batch_rewards.append(ep_rews)
+            ep_rews = []
             
             receiver.nextPacket()
 
@@ -237,7 +238,7 @@ def message_listener(time_step):
             batch_acts = torch.tensor(batch_actions, dtype = torch.float)
             batch_log_probs = torch.tensor(batch_log_probs, dtype = torch.float)
             print('intial batch_rewards - ', batch_rewards)
-            # batch_rewards.append(ep_rews)
+            # batch_rewards.append(ep_rews) # TODO: do i need this? 
             print('final batch_rewards - ', batch_rewards)
             batch_rtgs = model.compute_rtgs(batch_rewards) # TODO: should be batch_rewards instead of ep_rews
             batch_lens = [600] # TODO: update so correct 
@@ -313,7 +314,7 @@ def update_batch_info():
 
     if robot.getTime() - prev_time > update_sec and curr_index <= num_updates_per_episode: # update every second 
         prev_time = robot.getTime()
-        print(f'batch_observations: {batch_observations}')
+        # print(f'batch_observations: {batch_observations}')
         # update info 
         batch_observations.append((population[given_id].getPosition()[0], population[given_id].getPosition()[1]))
         batch_actions.append(Agent.action)
@@ -322,30 +323,30 @@ def update_batch_info():
         print(f'info updates : \n batch_observations: {batch_observations} \n batch_actions: {batch_actions} \n ep_rews: {ep_rews}') 
 
         # TODO: delete eventually .. testing network update 
-        if len(batch_observations) > 0: 
-            batch_observations = torch.tensor(batch_observations, dtype = torch.float)
-            batch_acts = torch.tensor(batch_actions, dtype = torch.float)
-            batch_log_probs = torch.tensor(batch_log_probs, dtype = torch.float)
-            print('intial batch_rewards - ', batch_rewards)
-            batch_rewards.append(ep_rews)
-            print('final batch_rewards - ', batch_rewards)
-            batch_rtgs = model.compute_rtgs(batch_rewards) # TODO: should be batch_rewards instead of ep_rews
-            batch_lens = [600] # TODO: update so correct 
-            print('converted to torch')
-            print(f'info updates : \n batch_observations: {batch_observations} \n batch_actions: {batch_acts} \n ep_rews: {ep_rews} \n batch_rtgs: {batch_rtgs}') 
+        # if len(batch_observations) > 0: 
+            # batch_observations = torch.tensor(batch_observations, dtype = torch.float)
+            # batch_acts = torch.tensor(batch_actions, dtype = torch.float)
+            # batch_log_probs = torch.tensor(batch_log_probs, dtype = torch.float)
+            # print('intial batch_rewards - ', batch_rewards)
+            # batch_rewards.append(ep_rews)
+            # print('final batch_rewards - ', batch_rewards)
+            # batch_rtgs = model.compute_rtgs(batch_rewards) # TODO: should be batch_rewards instead of ep_rews
+            # batch_lens = [600] # TODO: update so correct 
+            # print('converted to torch')
+            # print(f'info updates : \n batch_observations: {batch_observations} \n batch_actions: {batch_acts} \n ep_rews: {ep_rews} \n batch_rtgs: {batch_rtgs}') 
             
             
-            model.learn_adjusted(batch_observations, batch_acts, batch_log_probs, batch_rtgs, batch_lens) # TODO: update 
-            print('updated model')
+            # model.learn_adjusted(batch_observations, batch_acts, batch_log_probs, batch_rtgs, batch_lens) # TODO: update 
+            # print('updated model')
             
             # reset each batch 
-            batch_observations = []
-            batch_actions = []
-            ep_rews = []
-            batch_log_probs = [] 
-            batch_lens = [] 
-            curr_index = 0
-            batch_rewards = []
+            # batch_observations = []
+            # batch_actions = []
+            # ep_rews = []
+            # batch_log_probs = [] 
+            # batch_lens = [] 
+            # curr_index = 0
+            # batch_rewards = []
         
 
 def run_optimization():
