@@ -2,6 +2,9 @@
 
 import random, math
 
+import numpy as np # if not using MSI, can use this 
+from scipy.stats import wasserstein_distance # if not using MSI, can use this
+
 class Environment():
 
     def __init__(self, env_type = "random", seed = 11, num_blocks = 20):
@@ -22,6 +25,32 @@ class Environment():
 
         else: 
             print("Invalid/unimplemmented environment")
+
+
+    def generate_sim_env(self, curr_env):
+        env_list = ["random", "power law", 'single source']
+        div_info = []
+
+        for env in env_list:
+            if env == "random": 
+                env_list = self.random()
+                div = wasserstein_distance(np.array(env_list), np.array(curr_env))
+
+            elif env == "power law": 
+                env_list = self.power_law()
+                div = wasserstein_distance(np.array(env_list), np.array(curr_env))
+            
+            elif env == 'single source':
+                env_list = self.single_source()
+                div = wasserstein_distance(np.array(env_list), np.array(curr_env))
+
+            div_info.append(div)
+
+        # find the index of the minimum value in div_info
+        min_index = np.argmin(div_info)
+
+        
+        return env_list[min_index] 
 
 
     def power_law(self):
