@@ -7,6 +7,8 @@ import time
 from torch.optim import Adam
 from torch.distributions import MultivariateNormal
 
+import torch.nn.functional as F
+
 """Majority taken from PPO-for-Beginners github repo"""
 
 
@@ -32,7 +34,7 @@ class PPO():
 
         # initialize actor and critic 
         self.actor = policy_class(self.obs_dim, self.act_dim)
-        self.critic = policy_class(self.obs_dim, 1)
+        self.critic = policy_class(self.obs_dim, 1) # was 1
 
         # initialize optimizers 
         self.actor_optim = Adam(self.actor.parameters(), lr = self.lr)
@@ -270,16 +272,29 @@ class PPO():
         batch_acts shape: (num ts in batch, dim of action)
         """
         V = self.critic(batch_obs).squeeze() # should be same size as batch_rtgs
-        # print(f'critic output from evaluate(): {V}')
+        print(f'critic output from evaluate(): {V.shape}')
 
         # calc log probabilities 
         mean = self.actor(batch_obs)
-        # print(f'mean from self.actor: {mean}')
+        print(f'mean from self.actor: {mean.shape}')
         # dist = MultivariateNormal(mean, self.cov_mat)
         
         dist = torch.distributions.Categorical(logits=mean)
-        # print(f'dist output: {dist}')
+        
+        # Flatten batch_acts to ensure it's a 1D tensor
+        # batch_acts_flat = batch_acts.view(-1)
+
+        
+        # Assuming mean has shape (batch_size, num_actions)
+        print(f' batch acts shape -- {batch_acts.shape}' )
+        print(batch_acts)
+        # target_values = batch_acts[:, 0].long()
+        # print(f'target values: {target_values}')
+        
+        print(f'dist output: {dist}')
         log_probs = dist.log_prob(batch_acts)
+        
+        # log_probs = F.cross_entropy(mean, batch_acts[:, 0].long(), reduction='none') # with batches, instead of just 1 obs
         # print(f'log probs from evaluate(): {log_probs}')
 
         # return value vector of each obs in batch + log probs 

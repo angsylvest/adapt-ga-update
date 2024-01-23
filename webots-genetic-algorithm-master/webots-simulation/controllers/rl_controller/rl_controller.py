@@ -149,8 +149,8 @@ remove_orientations = []
 observation = []
 curr_action = []
 reward = 0 
-goal_posx = 0
-goal_posy = 0
+goal_posx = ""
+goal_posy = ""
 
 # calculates angle normal to current orientation 
 def calc_normal(curr_angle): 
@@ -336,7 +336,8 @@ def interpret(timestep):
         elif 'agent_action' in message: 
             curr_action = [int(message.split(":")[-1].split(",")[0]), int(message.split(":")[-1].split(",")[1])]
             goal_posx, goal_posy = curr_action[0] + cd_x, curr_action[0] + cd_y # TODO: not correct, but logic is there 
-            print(f'recieved new action - {curr_action}')
+            # print(message)
+            # print(f'recieved new action - {curr_action}')
             receiver_individual.nextPacket()
             
         else: 
@@ -413,6 +414,7 @@ while robot.step(timestep) != -1 and sim_complete != True:
             if math.dist([cd_x, cd_y], [goal_posx,goal_posy]) > 0.05:  
                 chosen_direction = round(math.atan2(goal_posy-cd_y,goal_posx-cd_x),2) 
             else: # request new action 
+                # print(f'successfully reached next pos: {goal_posx}, {goal_posy} with dis {math.dist([cd_x, cd_y], [goal_posx,goal_posy])}')
                 rew = reward()
                 msg = f'action-complete:{rew}'
                 emitter_individual.send(msg.encode('utf-8'))

@@ -30,27 +30,27 @@ population_array = []
 num_agents = 2
 
 # hyperparameters 
-timesteps_per_batch = 4800 
-max_timesteps_per_episode = 600 
+timesteps_per_batch = 60 # 4800 
+max_timesteps_per_episode = 30 # TODO: change to 600 once troubleshooted 
 n_updates_per_iteration = 5
 lr = 0.005
 gamma = 0.95
 clip = 0.2
-total_timesteps = 200_000_000
+total_timesteps = 200000000
 act_list = []
 updating = True
 
 # columns = 'agent id' + ',time step' + ',fitness' + ',xpos'+ ',ypos' + ',num col' + ',genotype' + ',potential time'
 
 # # global collected_count 
-# collected_count = []
+collected_count = []
 
 # # genetic algorithm-specific parameters 
 # num_generations = 10
 simulation_time = 30
 # trials = 25
 # curr_trial = 0 
-robot_population_sizes = [1]
+robot_population_sizes = [2]
 # gene_list = ['control speed 10', 'energy cost 5', 'food energy 30', 'observations thres 5']
 # curr_size = robot_population_sizes[0]
 env_type = "single source" # "power law"
@@ -73,8 +73,8 @@ high_dense = True
 
 # # statistics collected 
 population = []
-# found_list = []
-# total_found = 0
+found_list = []
+total_found = 0
 block_list = []
 # reproduce_list = []
 r_pos_to_generate = []
@@ -122,6 +122,7 @@ def generate_robot_central(num_robots):
     global prev_msg 
     global id_msg
     global population_array
+    global collected_count
 
     curr_msg = str("size-" + str(num_robots))
     # if curr_msg != prev_msg: 
@@ -169,6 +170,7 @@ def generate_robot_central(num_robots):
         # sets up metrics 
         population.append(rec_node)
         id_msg += " " + str(rec_node.getId()) 
+        collected_count.append(0)
 
 # set up environments 
 def generate_robot_edge(num_robots, right = False):
@@ -178,6 +180,7 @@ def generate_robot_edge(num_robots, right = False):
     global prev_msg 
     global id_msg
     global population_array
+    global collected_count
     
     curr_msg = str("size-" + str(num_robots))
     if curr_msg != prev_msg: 
@@ -237,6 +240,7 @@ def generate_robot_edge(num_robots, right = False):
         # sets up metrics 
         population.append(rec_node)
         id_msg += " " + str(rec_node.getId()) 
+        collected_count.append(0)
 
 
 def regenerate_blocks(seed = None):
@@ -383,6 +387,7 @@ def message_listener(time_step):
 def rollout():
     global population 
     global max_timesteps_per_episode
+    global found_list 
 
     # batch data 
     # batch_obs = []
@@ -401,6 +406,7 @@ def rollout():
         # done = False
 
         run_seconds(max_timesteps_per_episode) # gather info from sim for each agent 
+        print('completed run of episode')
         t += max_timesteps_per_episode
 
         # for ep_t in range(max_timesteps_per_episode): 
@@ -413,10 +419,12 @@ def rollout():
             # emitter.send(msg.encode('utf-8'))
 
         msg = 'episode-complete' # will reset agent 
-        emitter.send(msg.encode('utf-8'))
+        emitter_individual.send(msg.encode('utf-8'))
 
         # TODO: reset env here correctly 
         regenerate_blocks(seed = 11)
+        
+        found_list = []
 
     # return batch_obs, batch_acts, batch_log_probs, batch_lens # TODO: actually use these? 
 
@@ -461,17 +469,20 @@ def run_optimization():
 
             # perform batch_rollout 
             rollout()
+            run_seconds(1)
 
             updating = True 
-            msg = 'updating network'
-            emitter.send(msg.encode('utf-8'))
+            msg = 'updating-network'
+            emitter_individual.send(msg.encode('utf-8'))
 
             while updating: 
-                message_listener()
+                run_seconds(1) 
+                message_listener(0) # TODO: remove var if not useful
 
             # t_so_far += np.sum(batch_lens) # TODO: find way to extract this
 
             # TODO: need way to pause simulation while this calculation is happening 
+            # run_seconds(1)
     
     return 
 
@@ -502,10 +513,10 @@ def run_seconds(t,waiting=False):
             msg = 'return_fitness'
             # if prev_msg != msg: 
             # message_listener(robot.getTime()) # will clear out msg until next gen 
-            print('requesting fitness')
-            emitter.send('return_fitness'.encode('utf-8'))
-            prev_msg = msg 
-            print('requesting fitness')
+            # print('requesting fitness')
+            # emitter.send('return_fitness'.encode('utf-8'))
+            # prev_msg = msg 
+            # print('requesting fitness')
             break 
  
     return 

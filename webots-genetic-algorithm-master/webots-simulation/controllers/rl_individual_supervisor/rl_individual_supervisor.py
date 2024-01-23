@@ -136,6 +136,7 @@ def message_listener(time_step):
     global batch_log_probs
     global batch_lens
     global batch_rtgs
+    global batch_actions
     global ep_rews
     global batch_lens
     global Agent
@@ -159,10 +160,11 @@ def message_listener(time_step):
             # set action for corresponding robot 
             pos = np.array([population[given_id].getPosition()[0], population[given_id].getPosition()[1]])
             curr_action, log_probs = model.get_action(pos)
+            Agent.action = curr_action[0] 
             print(f'initial action for agent {assigned_r_name} with action : {curr_action} for {type(curr_action)}')
             # discretized_action = np.argmax(curr_action).item() # TODO: might not be correct, index of the maximum value in your continuous vector as a discrete action
             curr_action = env._action_to_direction[int(curr_action[0])]
-            Agent.action = curr_action 
+            # Agent.action = curr_action 
             print(f'initial action for agent {assigned_r_name} with action : {curr_action} and agent reward {Agent.reward}')
 
             msg = 'agent_action:'+ str(curr_action[0]) + "," + str(curr_action[1])
@@ -178,10 +180,11 @@ def message_listener(time_step):
 
         elif 'action-request' in message: 
             pos = np.array([population[given_id].getPosition()[0], population[given_id].getPosition()[1]])
-            action, log_prob = env._action_to_direction(model.get_action(pos))
+            Agent.action, log_prob = model.get_action(pos)
+            curr_action = env._action_to_direction(Agent.action)
             Agent.set_location((population[given_id].getPosition()[0], population[given_id].getPosition()[1]))
 
-            Agent.action = action 
+            # Agent.action = action 
             Agent.log_prob = log_prob
             
             curr_action = Agent.action
@@ -208,7 +211,19 @@ def message_listener(time_step):
 
             batch_lens.append(600) # TODO: make more dynamic 
             batch_rewards.append(ep_rews)
+            print(batch_rewards)
             ep_rews = []
+            ep_rews.append(Agent.reward)
+            
+            # set action for corresponding robot 
+            pos = np.array([population[given_id].getPosition()[0], population[given_id].getPosition()[1]])
+            curr_action, log_probs = model.get_action(pos)
+            Agent.action = curr_action[0] 
+            print(f'initial action for agent {assigned_r_name} with action : {curr_action} for {type(curr_action)}')
+            # discretized_action = np.argmax(curr_action).item() # TODO: might not be correct, index of the maximum value in your continuous vector as a discrete action
+            curr_action = env._action_to_direction[int(curr_action[0])]
+            # Agent.action = curr_action 
+            # batch
             
             receiver.nextPacket()
 
@@ -234,17 +249,19 @@ def message_listener(time_step):
             # curr_index = 0
             
             # TODO: need to make work across episodes updated code with corrections 
+            print(f'init batch sizes \n batch_observations: {len(batch_observations)} \n batch_actions: {len(batch_actions)}')
+            print('batch actions --', batch_actions)
             batch_observations = torch.tensor(batch_observations, dtype = torch.float)
             batch_acts = torch.tensor(batch_actions, dtype = torch.float)
             batch_log_probs = torch.tensor(batch_log_probs, dtype = torch.float)
-            print('intial batch_rewards - ', batch_rewards)
+            # print('intial batch_rewards - ', batch_rewards)
             # batch_rewards.append(ep_rews) # TODO: do i need this? 
-            print('final batch_rewards - ', batch_rewards)
+            print('final batch_rewards - ', len(batch_rewards[0]))
             batch_rtgs = model.compute_rtgs(batch_rewards) # TODO: should be batch_rewards instead of ep_rews
             batch_lens = [600] # TODO: update so correct 
-            print('converted to torch')
-            print(f'info updates : \n batch_observations: {batch_observations} \n batch_actions: {batch_acts} \n ep_rews: {ep_rews} \n batch_rtgs: {batch_rtgs}') 
-            
+            # print('converted to torch')
+            # print(f'info updates : \n batch_observations: {batch_observations} \n batch_actions: {batch_acts} \n ep_rews: {ep_rews} \n batch_rtgs: {batch_rtgs}') 
+            print(f'batch info dims: \n batch_observations: {batch_observations.shape} \n batch_actions: {batch_acts.shape} \n batch_rtgs: {batch_rtgs.shape}')
             
             model.learn_adjusted(batch_observations, batch_acts, batch_log_probs, batch_rtgs, batch_lens) # TODO: update 
             print('updated model')
@@ -257,8 +274,12 @@ def message_listener(time_step):
             batch_lens = [] 
             curr_index = 0
             batch_rewards = []
+            
+            msg = "update-complete"
 
             emitter.send(msg.encode('utf-8'))
+            
+            receiver.nextPacket()
             
         else: 
             receiver.nextPacket()
@@ -277,10 +298,11 @@ def message_listener(time_step):
             pos = np.array([population[given_id].getPosition()[0], population[given_id].getPosition()[1]])
             Agent.set_location((population[given_id].getPosition()[0], population[given_id].getPosition()[1])) 
             action, log_prob = model.get_action(pos) 
+            Agent.action = action[0] 
             
             discretized_action = np.argmax(action).item() # TODO: might not be correct, index of the maximum value in your continuous vector as a discrete action
             curr_action = env._action_to_direction[discretized_action]
-            Agent.action = curr_action 
+            # Agent.action = curr_action 
 
             # Agent.action = env._action_to_direction(action).tolist() 
             Agent.log_prob = log_prob 
@@ -320,7 +342,7 @@ def update_batch_info():
         batch_actions.append(Agent.action)
         ep_rews.append(Agent.reward)
         batch_log_probs.append(Agent.log_prob)
-        print(f'info updates : \n batch_observations: {batch_observations} \n batch_actions: {batch_actions} \n ep_rews: {ep_rews}') 
+        # print(f'info updates : \n batch_observations: {batch_observations} \n batch_actions: {batch_actions} \n ep_rews: {ep_rews}') 
 
         # TODO: delete eventually .. testing network update 
         # if len(batch_observations) > 0: 
@@ -333,7 +355,7 @@ def update_batch_info():
             # batch_rtgs = model.compute_rtgs(batch_rewards) # TODO: should be batch_rewards instead of ep_rews
             # batch_lens = [600] # TODO: update so correct 
             # print('converted to torch')
-            # print(f'info updates : \n batch_observations: {batch_observations} \n batch_actions: {batch_acts} \n ep_rews: {ep_rews} \n batch_rtgs: {batch_rtgs}') 
+            # print(f'info updates : \n batch_observations: {batch_observations.shape} \n batch_actions: {batch_acts.shape} \n ep_rews: {ep_rews} \n batch_rtgs: {batch_rtgs}') 
             
             
             # model.learn_adjusted(batch_observations, batch_acts, batch_log_probs, batch_rtgs, batch_lens) # TODO: update 
@@ -347,6 +369,8 @@ def update_batch_info():
             # batch_lens = [] 
             # curr_index = 0
             # batch_rewards = []
+            
+            
         
 
 def run_optimization():
