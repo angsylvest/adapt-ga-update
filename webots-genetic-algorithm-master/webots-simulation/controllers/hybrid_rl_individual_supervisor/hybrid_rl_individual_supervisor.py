@@ -2,17 +2,6 @@ from controller import Supervisor, Node, Keyboard, Emitter, Receiver, Field
 import math 
 from robot_pop import * 
 import random
-import time 
-
-import sys 
-sys.path.append('../../')
-from utils.rl_agent import *
-from utils.ppo import * 
-from utils.nn import * 
-from utils.rl_wrapper import * 
-
-# ideally would have global env variable available here 
-from controllers.hybrid_rl_supervisor.hybrid_rl_supervisor import grid_env 
 
 """
 Main supervisor base 
@@ -25,8 +14,12 @@ columns = 'agent id' + ',time step' + ',fitness' + ',xpos'+ ',ypos' + ',num col'
 collected_count = []
 
 # statistics collected 
+overall_fitness_scores = []
+initial_genotypes = []
+pop_genotypes = [] 
 total_found = 0
 pairs = []
+curr_best = -1 
 population = []
 
 # set-up robot 
@@ -36,15 +29,6 @@ timestep = int(robot.getBasicTimeStep())
 
 # generalize id acquisition (will be same as robot assigned to), might change to someting different  
 given_id = int(robot.getName()[11:-1])
-assigned_r_name = "k0" if given_id == 0 else "k0(" + str(given_id) + ")" 
-Agent = RLAgent()
-# Agent.set_id(assigned_r_name)
-# Agent.set_location((population[given_id].getPosition()[0], population[given_id].getPosition()[1]))
-
-# individual PPO model for each agent 
-hyperparamters = {}
-env = ForagingEnv()
-model = PPO(FeedForwardNN, env, **hyperparamters)
     
 #### allow personal supervisor to send important encounter info back to supervisor ## 
 emitter = robot.getDevice("emitter")
@@ -72,73 +56,87 @@ curr_fitness = 0
 child = ""
 
 comparing_genes = False 
-complete = True 
-
-ep_rews = []
-ep_actions = []
-# log_probs = []
-batch_observations = []
-batch_rewards = []
-batch_actions = []
-batch_rtgs = []
-batch_lens = []
-batch_log_probs = []
-
-# time keeping 
-prev_time = robot.getTime()
-update_sec = 1 
-
 
 # based off given id of robot assigned 
 def find_nearest_robot_genotype(r_index):
     global population 
+    global reproduce_list 
     global collected_count 
     global pairs 
+    global overall_fitness_scores
     global prev_msg 
 
     closest_neigh = " "
     curr_robot = population[r_index]
     curr_dist = 1000 # arbitrary value 
-
+    curr_fitness = overall_fitness_scores[r_index]
+    # print('overall fitness list', overall_fitness_scores)
+    curr_overall_fitness = overall_fitness_scores[r_index]
+    other_fitness = 0
     
     curr_pos = [curr_robot.getPosition()[0], curr_robot.getPosition()[1]]
     other_index = r_index
     
     for i in range(len(population)):
         if (i != r_index): 
-            other_pos = [population[i].getPosition()[0], population[i].getPosition()[1]]
+            other_pos = [population[i].getPosition()[0], population[i].getPosition()[0]]
             dis = math.dist(curr_pos, other_pos)
             if closest_neigh == " ":
                 closest_neigh = str(population[i].getId())
                 curr_dist = dis
+                other_fitness = overall_fitness_scores[i]
                 other_index = i
             elif dis < curr_dist: 
                 closest_neigh = str(population[i].getId())
                 curr_dist = dis 
+                other_fitness = overall_fitness_scores[i]
                 other_index = i
                 
     return other_index
 
+
 def message_listener(time_step):
     global total_found 
     global collected_count 
+    global found_list
+    global pop_genotypes
     global population
+    global curr_size
     global pairs 
+    global overall_fitness_scores
+    global curr_best
     global child 
     global comparing_genes
-    global curr_action
-    global complete 
-
-    global batch_rewards
-    global ep_rews
-    global batch_lens
-    global Agent
-
 
     if receiver.getQueueLength()>0:
         message = receiver.getString()
+        # print('individual msgs --', message)
+            
+        if 'fitness-scores' in message:
+            fs = message.split(" ")[1:]
+            overall_fitness_scores = [int(i) for i in fs]
+            receiver.nextPacket()
+         
+        ## resets to current population genotypes     
+        elif 'generation-complete' in message:
+            curr_best = -1 
+            pop_genotypes = message.split(" ")[1:]
+            overall_fitness_scores = [0 for i in range(len(pop_genotypes))]
+            
+            # initial child
+            if not comparing_genes: 
+                child = reproduce(pop_genotypes[int(given_id)], pop_genotypes[int(given_id)])
+                child = "child" + str(child) 
+                emitter_individual.send(child.encode('utf-8'))
+            else: 
+                child_1, child_2 = reproduce(pop_genotypes[int(given_id)], pop_genotypes[int(given_id)], multi = comparing_genes)
+                child = "child-" + str(child_1) + '-' + str(child_2) 
+                emitter_individual.send(child.encode('utf-8'))
+            
+            receiver.nextPacket()
+        
         ## access to robot id for node acquisition    
-        if 'ids' in message: 
+        elif 'ids' in message: 
             id_msg = message.split(" ")[1:]
             population = []
             
@@ -146,64 +144,21 @@ def message_listener(time_step):
                 node = robot.getFromId(int(id))
                 population.append(node)
                 
-            Agent.set_id(assigned_r_name)
-            Agent.set_location((population[given_id].getPosition()[0], population[given_id].getPosition()[1]))
-            
-            # set action for corresponding robot 
-            pos = np.array([population[given_id].getPosition()[0], population[given_id].getPosition()[1]])
-            curr_action, log_probs = model.get_action(pos)
-            discretized_action = np.argmax(curr_action).item() # TODO: might not be correct, index of the maximum value in your continuous vector as a discrete action
-            curr_action = env._action_to_direction[discretized_action]
-            Agent.action = curr_action 
-            # print(f'initial action for agent {assigned_r_name} with action : {curr_action}')
-
-            msg = 'agent_action:'+ str(curr_action[0]) + "," + str(curr_action[1])
-            emitter_individual.send(msg.encode('utf-8'))
-                
             receiver.nextPacket() 
             
         elif 'size' in message: 
             population = []
             size = int(message[4:]) 
             receiver.nextPacket()
-
-        elif 'action-request' in message: 
-            curr_action = Agent.action
-            action, log_prob = env._action_to_direction(model.get_action())
-            Agent.set_location((population[given_id].getPosition()[0], population[given_id].getPosition()[1]))
-
-            Agent.action = action 
-            Agent.log_prob = log_prob
-
-            # if complete: batch_log_probs.append(log_prob) 
-            curr_action = Agent.action if not complete else action # TODO: must do next action once done with previous
-
-            # ep_actions.append(curr_action) 
-
-            receiver.nextPacket()
-
-        elif 'episode-complete' in message: 
-            # TODO: reset agent + reset actions for agent
-            Agent.reset() 
-            msg = 'episode-agent-complete'
-            emitter_individual.send(msg.encode('utf-8'))
-
-            batch_lens.append(600) # TODO: make more dynamic 
-            batch_rewards.append(ep_rews)
+            
+        elif 'comparing' in message: 
+            if message.split('-')[1] == 'False':
+                comparing_genes = False
+            else: 
+                comparing_genes = True 
             
             receiver.nextPacket()
-
-        elif 'updating-network' in message: 
-            # TODO: make network update pause sim or stop further collection of statistics 
-            batch_obs = torch.tensor(batch_obs, dtype = torch.float)
-            batch_acts = torch.tensor(batch_acts, dtype = torch.float)
-            batch_log_probs = torch.tensor(batch_log_probs, dtype = torch.float)
-            batch_rtgs = model.compute_rtgs(batch_rewards)
             
-            
-            model.learn_adjusted(batch_observations, batch_acts, batch_log_probs, batch_rtgs, batch_lens) # TODO: update 
-            msg = 'update-complete'
-            emitter.send(msg.encode('utf-8'))
             
         else: 
             receiver.nextPacket()
@@ -211,68 +166,62 @@ def message_listener(time_step):
     if receiver_individual.getQueueLength()>0:  
         # message_individual = receiver_individual.getData().decode('utf-8')
         message_individual = receiver_individual.getString()
-
-        if 'action-complete' in message_individual: 
-            Agent.reward = message_individual.split(":")[-1]
-            obs, rew, done = Agent.observation, Agent.reward, Agent.done
-            ep_rews.append(rew)
-
-            # update action and tell agent to execute 
-            # curr_action = Agent.action  
-            pos = np.array([population[given_id].getPosition()[0], population[given_id].getPosition()[1]])
-            Agent.set_location((population[given_id].getPosition()[0], population[given_id].getPosition()[1])) 
-            action, log_prob = model.get_action(pos) 
+        # print('indiviudal msgs --', message_individual)
             
-            discretized_action = np.argmax(action).item() # TODO: might not be correct, index of the maximum value in your continuous vector as a discrete action
-            curr_action = env._action_to_direction[discretized_action]
-            Agent.action = curr_action 
-
-            # Agent.action = env._action_to_direction(action).tolist() 
-            Agent.log_prob = log_prob 
-
-            # if complete: batch_log_probs.append(log_prob) 
-            # curr_action = Agent.action if not complete else action # TODO: must do next action once done with previous
-            msg = 'agent_action:'+ str(curr_action[0]) + "," + str(curr_action[1])
-            emitter_individual.send(msg.encode('utf-8'))
+        if 'encounter' in message_individual: 
+            robo_index = int(message_individual.split('-')[0])
+            # reproduce_list.append(robo_index) 
+            # print('robot found -- checking genotype', robo_index) 
+            curr_orient = message_individual.split('[')[-1]
+            
+            # only store best genotype 
+            other_index = find_nearest_robot_genotype(robo_index)
+            if overall_fitness_scores[other_index] > curr_best: 
+                if not comparing_genes: 
+                    curr_best = other_index
+                    child = 'child' + str(reproduce(pop_genotypes[robo_index], pop_genotypes[curr_best]))
+                    # print('child ---', child) 
+                    # uncomment if want to just use curr_best genotype 
+                    # child = 'child' + str(pop_genotypes[curr_best]))
+                    
+                    emitter_individual.send(child.encode('utf-8'))
+                else: 
+                    child_1, child_2 = reproduce(pop_genotypes[int(given_id)], pop_genotypes[int(curr_best)], multi = comparing_genes)
+                    child = "child-" + str(child_1) + '-' + str(child_2) 
+                    emitter_individual.send(child.encode('utf-8'))
+                    
+            else: 
+                child = 'child' + str(reproduce(pop_genotypes[robo_index], pop_genotypes[robo_index]))
+                emitter_individual.send(child.encode('utf-8'))
+                # emitter_individual.send('penalize'.encode('utf-8'))
+                   
+            comm_information = "comm-" + str(robo_index) + "-" + str(other_index) + "-[" + str(curr_orient)
+            emitter_individual.send(comm_information.encode('utf-8'))
+            
             receiver_individual.nextPacket()
-
+            
         else: 
-            # print('indiviudal msgs --', message_individual)
             receiver_individual.nextPacket()
-
-
-# TODO: make adjusted function for batch_obs, back_acts, batch_log_probs, batch_rtgs, batch_lens
      
-def update_batch_info():
-    global prev_time
-    global update_sec
-    global given_id
-
-    global batch_observations
-    global batch_actions
-    global ep_rews
-    global batch_log_probs 
-
-    if robot.getTime() - prev_time > update_sec: # update every second 
-        prev_time = robot.getTime()
-        # update info 
-        batch_observations.append(population[given_id].getPosition())
-        batch_actions.append(Agent.action)
-        ep_rews.append(Agent.reward)
-        batch_log_probs.append(Agent.log_prob)
-
-
+    
 def run_optimization():
+    global pop_genotypes 
+    global gene_list 
     global updated
+    global simulation_time 
+    global overall_f
     global total_found 
     global collected_count
+    global found_list
+    global reproduce_list 
+    global r_pos_to_generate
+    global curr_size
     global population 
     global prev_msg 
     global timestep 
     
     while robot.step(timestep) != -1: 
-        message_listener(timestep)    
-        update_batch_info()    
+        message_listener(timestep)        
      
   
 def main(): 

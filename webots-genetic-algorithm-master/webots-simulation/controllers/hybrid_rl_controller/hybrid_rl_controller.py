@@ -84,11 +84,15 @@ sim_complete = False
 obj_found_so_far = []
 curr_sim_size = 5
 repopulate = False 
+# follow_thres = 3
 
+next_child = ""
+num_better = 0 
 sim_type = "random" 
 communication = False 
 using_high_dens = True 
 
+gens_elapsed = 0 
 
 terrains = ['normal', 'road']
 current_terrain = terrains[0] # either normal or road 
@@ -107,6 +111,23 @@ emitter_individual.setChannel(int(given_id)*10)
 receiver_individual = robot.getDevice("receiver_processor")
 receiver_individual.enable(timestep)
 receiver_individual.setChannel((int(given_id) * 10) - 1)
+
+# collects statistics about strategy and collisions 
+strategy_f = open("../../graph-generation/collision-data/ga-info.csv", 'a')
+gene_df = open("../../graph-generation/collision-data/ga-gene-info.csv", 'a')
+
+# environment statistics garnered 
+time_elapsed_since_block = 0 
+time_elapsed_since_robot = 0
+t_elapsed_constant = 10
+weights = [0.25, 0.25, 0.25, 0.25] 
+observations_per_strategy = [1, 1, 1, 1] # num successes using each (set to 1 so that there is still likelihood for gathering strategy) 
+total_observations = sum(observations_per_strategy)
+weights_high_density = [0.25, 0.25, 0.25, 0.25] 
+observations_per_strategy_high_dens = [1, 1, 1, 1] # num successes using each (set to 1 so that there is still likelihood for gathering strategy) 
+total_observations_high_dense = sum(observations_per_strategy_high_dens)
+current_strat_index = 0 # set arbitrarily 
+curr_best_weights = [] # set initially as empty 
 
 # statistics to be updated each second 
 t_elapsed_block_total = 0 # gathered over sec
@@ -135,7 +156,6 @@ time_elapsed = 0 # on a per sec basis
 # prev message (limit overloading receiver/emitter system) 
 prev_msg = "" 
 trial_num = -1 
-curr_action = ""
 
 found_something = False 
 
@@ -144,10 +164,21 @@ time_into_generation = 0
 using_artificial_field = False
 remove_orientations = []
 
-# rl relevant information for agent 
-observation = []
-curr_action = []
-reward = 0 
+def identify_terrain(r,g,b):
+    global terrains
+    global current_terrain
+    global prev_terrain 
+    
+    prev_terrain = current_terrain 
+    
+    if (int(r) > 170):
+        # ugly hardcode to determine if on road 
+        index = 0 
+        current_terrain = terrains[1]
+        
+    else: 
+        current_terrain = terrains[0]
+
 
 # calculates angle normal to current orientation 
 def calc_normal(curr_angle): 
@@ -168,14 +199,41 @@ def calc_normal(curr_angle):
         
     elif (curr_angle == round(pi,2)): # handle edge case that seems to only happen w/exactly 3.14 (never broke before because never quite at 3.14????)
         return round(-1*round(pi/2, 2),2)
-         
-def reward():
-    # TODO: fill with correct information 
-    global fitness # num collisions
+        
+     
+# parameters reset when strategy changes (after a generation) 
+# fix (make fitness reliant on prior observations) 
+def calc_robot_fitness():
+    global t_elapsed_block_total
     global n_observations_block
-
-    return num_observations - (fitness)
+    global fitness 
+    global obj_weight 
+    global obstacle_weight
     
+    
+    if fitness != 0: 
+        return obj_weight*(n_observations_block) + obstacle_weight*(1 / fitness) # + 0.5*agent_observation['num_objects_observed']
+    else: 
+        return obj_weight*(n_observations_block) # + 0.5*agent_observation['num_objects_observed']
+    
+    # else: 
+        # return 0 
+
+# determines whether new strategy should be attempted based off given costs/benefits
+# another idea: reward forward movement (ie., coverage? )/ time spent to complete strategy, just not as much 
+def energy_expenditure():
+    global energy_per_item 
+    global energy_cost 
+    global energy_collected_gen 
+    global time_elapsed 
+    
+    print('avg num observed --', agent_observation['num_objects_observed'])
+    if time_elapsed != 0: 
+        return (energy_collected_gen*energy_per_item  - (energy_cost*time_elapsed))
+    else: 
+        return energy_collected_gen*energy_per_item # + (agent_observation['num_objects_observed']*energy_per_item)
+    
+
 # direction selection 
 def rotate_random():
     # will choose direction following biased random walk (initial) 
@@ -184,6 +242,7 @@ def rotate_random():
     chosen_direction = round(chosen_direction, 2) 
     return chosen_direction 
     
+   
 def correlated_random(curr_dir): 
     # follows a markov chain (persistence), will exclude direction directly behind  
     # short-term straight line adherence (very simple) 
@@ -198,17 +257,20 @@ def correlated_random(curr_dir):
         
     else: 
         return round(random.choice([pi,pi, pi/2, -pi/2]),2)
-         
+        
+        
 def filtered_random(list_collisions): 
     # simply removes directions with obstacles while trying to re-orient 
+    
     list_of_dir = [0.00, round(pi, 2), round(pi/2, 2), round(-pi/2, 2)]
+    print('list of collisions --', list_collisions, list_of_dir) 
     for i in list_collisions: 
         if i in list_of_dir: # remove requesting same dir 
             list_of_dir.remove(round(i,2))
     if len(list_of_dir) == 0: 
          return round(random.choice(list_collisions), 2)   
     return round(random.choice(list_of_dir), 2)
-      
+        
 def dynamic_correlated_random(curr_dir, bias): 
     # follows a markov chain (persistence), will exclude direction directly behind  
     # short-term straight line adherence (very simple)  
@@ -224,7 +286,64 @@ def dynamic_correlated_random(curr_dir, bias):
         
     else: 
         return round(random.choice([pi, pi/2, -pi/2, bias, bias]),2)
-           
+   
+# strategy selection      
+def choose_strategy(curr_dir, t_block, t_robot, original_weights, update = False):
+    global curr_best_weights
+    global given_id
+    global strategy_f 
+    global curr_sim_size
+    global current_strat_index 
+    global weights 
+    
+    
+    # want to update weights based off effectiveness of current strategy 
+    if update: 
+        new_weights = create_new_weights(t_block, t_robot, original_weights)
+        weights = new_weights 
+        strat = random.choices(['straight','alternating-left','alternating-right', 'true random'], new_weights)[0]
+        # print('current strat', strat)
+        current_strat_index = ['straight','alternating-left','alternating-right', 'true random'].index(strat) 
+        # strategy_f.write(str(given_id) + ','+ str(robot.getTime()) + ',' + str(original_weights[0]) + ',' + str(original_weights[1]) + ',' + str(original_weights[2]) + ',' + str(original_weights[3]) + ','+ str(t_block) + ',' + str(curr_sim_size) + ',' + str(calc_robot_fitness())+ ',' + str(curr_sim_size) + ',ga' +'\n')
+        # strategy_f.close()
+        # strategy_f = open("../../graph-generation/collision-data/ga-info.csv", 'a')
+
+    if not update: 
+        strat = random.choices(['straight','alternating-left','alternating-right', 'true random'], original_weights)[0]
+        current_strat_index = ['straight','alternating-left','alternating-right', 'true random'].index(strat)
+    
+    if strat == 'straight':
+        return [curr_dir, curr_dir, curr_dir, curr_dir]
+    elif strat == 'alternating-right':
+        return [round(pi/2, 2), 0, round(-pi/2,2), round(pi,2)]
+    elif strat == 'alternating-left':
+        return [round(pi/2,2), round(pi,2), round(-pi/2,2), 0]
+    else: #  correlated random
+        return [correlated_random(curr_dir), correlated_random(curr_dir), correlated_random(curr_dir), correlated_random(curr_dir)]
+    
+    
+def create_new_weights(t_block, t_robot, original_weights): 
+    # print('original weights --', original_weights)
+    global curr_best_weights
+    global weights 
+    global observations_per_strategy
+    global total_observations 
+    global current_strat_index
+    global observations_per_strategy
+    # want to incorporate some level of noise to avoid local max, instead of global
+    # hope to ensure that good weights continue to persist in the pool 
+    
+    if sum(observations_per_strategy) >= observations_threshold: 
+        new_w = [observations_per_strategy[i] + 0.25 for i in range(len(observations_per_strategy))]
+        new_w = [observations_per_strategy[i]/sum(observations_per_strategy) for i in range(len(observations_per_strategy))]
+        return new_w
+    
+    # want to set weights so more biased towards straight-line motion (no energy)  
+    else: 
+        adjust = 0.02
+        original_weights[-1] = original_weights[-1] + adjust
+        return [float(i)/sum(original_weights) for i in original_weights] 
+         
 def begin_rotating():
     leftMotor.setPosition(float('inf'))
     leftMotor.setVelocity(-2)
@@ -257,52 +376,234 @@ def stop():
     
 def release_object():
     leftGrip.setPosition(open_grip)
-    rightGrip.setPosition(open_grip)   
+    rightGrip.setPosition(open_grip)
+    
+def parse_genotype(gen):
+    global forward_speed 
+    global energy_per_item 
+    global energy_cost 
+    global observations_threshold 
+    global observations_threshold
+    global curr_robot_genotype
+    
+    curr_robot_genotype = gen
+    
+    forward_speed = gen[0].count('1')
+    if forward_speed < 5: 
+        forward_speed = 5
+    energy_cost = gen[1].count('1')
+    energy_per_item = gen[2].count('1')
+    observations_threshold = gen[3].count('1')
     
 def interpret(timestep): 
     global fitness
+    global sim_complete
     global given_id
+    global strategy_f
+    global gene_df
     global obj_found_so_far
+    global time_elapsed_since_block
     global holding_something
+    global chosen_direction
+    global strategy 
+    global weights 
     global curr_sim_size
+    global best_prev_genotype
+    global best_prev_score  
     
+    global observations_per_strategy
+    global total_observations 
+    global current_strat_index 
     global overall_fitness
     
+    global energy_collected_gen
+    global time_elapsed
+    global t_elapsed_block_total
     global n_observations_block
     global cleaning 
+    global next_child
     global trial_num 
     global curr_robot_genotype
     global n_observations_robot
+    global num_better
     global repopulate
     
     global found_something
+    global gens_elapsed
+    global time_into_generation
     global agent_observation 
-    global sim_type
 
-    global curr_action 
+    global weights_high_density
+    global observations_per_strategy_high_dens
+    global sim_type
+    
+    global curr_index 
+    global remove_orientations
+
     
     if receiver.getQueueLength()>0:
+        # message = receiver.getData().decode('utf-8')
+        # message = receiver.getData().decode('utf-8')
         message = receiver.getString()
         # print('incoming messages: ', given_id, message) 
+    
+        # intertrial changes 
+        if message[0:2] == "#" + str(given_id):
+            message = message[2:].split("*")
+            parse_genotype(message)
+            obj_found_so_far = []
+            n_observations_robot = 0
+            num_better = 0 
+            
+            receiver.nextPacket()
+            
+            
+        elif message == "return_fitness": # happpens at end of generation 
+            if best_prev_genotype == '!': 
+                best_prev_genotype = 'none'
+            
+            response = "k" + str(int(given_id)) + "-fitness" + str(fitness) + '-other' + str(best_prev_genotype) + '-overall' + str(calc_robot_fitness())
+            # print('calculating fitness', calc_robot_fitness())
+            strategy_f.write(str(given_id) + ','+ str(robot.getTime()) + ',' + str(weights[0]) + ',' + str(weights[1]) + ',' + str(weights[2]) + ',' + str(weights[3]) + ','+ str(time_elapsed_since_block) + ',' + str(n_observations_robot)  + ',' + str(curr_sim_size) + ',' + str(calc_robot_fitness())+ ',' + str(curr_sim_size) + ',ga' + ',' + str(trial_num) + ',' + str(n_observations_block) + ',' + str(curr_robot_genotype) + ',' + str(num_better) + ',' + str(gps.getValues()[0]) + ',' + str(gps.getValues()[1]) + '\n')
+            strategy_f.close()
+            strategy_f = open(f"../../graph-generation/collision-data/ga-info-{sim_type}-{curr_sim_size}-comm_{communication}-dense_{using_high_dens}.csv", 'a')
+            
+            gene_df.write(str(given_id) + ','+ str(robot.getTime()) + ',' + str(trial_num) + ',' + str(curr_sim_size) + ',' + str(curr_robot_genotype) + '\n')
+            gene_df.close()
+            gene_df = open(f"../../graph-generation/collision-data/ga-gene-info-{sim_type}-{curr_sim_size}-comm_{communication}-dense_{using_high_dens}.csv", 'a')
+
+            # print('written into csvs') 
+            
+            fitness = 0
+            overall_fitness = 0
+            best_prev_genotype = '!'
+            best_prev_score = -1000
+            num_better = 0 
+            time_into_generation = 0
+            agent_observation = {'num_interactions': 0, 'num_objects_observed': 0, 'num_collisions':0}
+            time_elapsed = 0 # on a per sec basis 
+            
+            if not found_something: 
+                gens_elapsed += 1 
+            
+           
+            if next_child != "":
+                parse_genotype(next_child)
+                # print('current child', next_child)
+            
+            emitter.send(response.encode('utf-8'))
+            # found_something = False 
+            # obj_found_so_far = []
+            receiver.nextPacket()
+
+        elif message == 'sim-complete':
+            sim_complete = True 
+            strategy_f.close()
+            receiver.nextPacket()
+            
+        elif 'trial' in message: 
+            # resets relevant statistics 
+            trial_num = int(message[5:])
+            print('end of trial, moving on to next trial', trial_num)
+            gens_elapsed = 0
+            fitness = 0 # number of obstacles 
+            best_prev_genotype = '!'
+            best_prev_score = -1000
+            observations_per_strategy = [1, 1, 1, 1]
+            weights = [0.25, 0.25, 0.25, 0.25] 
+
+            weights_high_density = [0.25, 0.25, 0.25, 0.25] 
+            observations_per_strategy_high_dens = [1, 1, 1, 1] # num successes using each (set to 1 so that there is still likelihood for gathering strategy) 
+            
+            current_strat_index = 0
+            
+            t_elapsed_block_total = 0
+            n_observations_block = 0
+            n_observations_robot = 0
+            
+            energy_collected_gen = 1
+            num_better = 0 
+            
+            found_something = False 
+            gens_elapsed = 0 
+            
+            time_elapsed = 0 # on a per sec basis 
+            overall_fitness = 0
+            # holding_something = False 
+            obj_found_so_far = []
+            curr_index = 0 
+            remove_orientations = []
+            
+            receiver.nextPacket()
+            
+        elif 'partner' in message: 
+            # assesses if this is best so far in generation 
+            msg = message.split('-')
+            other_robot_index = msg[1]
+            other_fitness = msg[2]
+            other_collected_count = msg[3]
+            
+            if (other_collected_count - other_fitness) > best_prev_score: 
+                best_prev_genotype = other_robot_index 
+                best_prev_score = other_collected_count
+            receiver.nextPacket()
         
         # want to enforce strategy by adding for bias to it here     
-        if message[0] == "%" and str(message.split('-')[0][1:]) == str(given_id):
+        elif message[0] == "%" and str(message.split('-')[0][1:]) == str(given_id):
             # strategy_f.write('agent id:' + str(given_id) + ',time step: '+ timestep + ',straight:' + str(weights[0]) + ',alternating-left:' + str(weights[1]) + ',alternating-right:' + str(weights[2]) + ',true random:' + str(weights[3]) + ',time since last block:'+ str(time_elapsed_since_block) + ',size' + str(curr_sim_size))
             holding_something = True 
             found_something = True 
-            n_observations_block += 1 
             
+            # print('currently holding obj--', given_id)
+            if using_high_dens and agent_observation['num_collisions'] > 0.3:
+                observations_per_strategy_high_dens[current_strat_index] += 1
+
+                incr = 0.02
+                weights_high_density[current_strat_index] = weights_high_density[current_strat_index] + incr
+                weights_high_density = [float(i)/sum(weights_high_density) for i in weights_high_density] 
+
+            
+            else: 
+                observations_per_strategy[current_strat_index] += 1 
+                obj_id = message.split('-')[1] 
+                
+                inc = 0.02
+                weights[current_strat_index] = weights[current_strat_index] + inc
+                weights = [float(i)/sum(weights) for i in weights] 
+
+            n_observations_block += 1 
+            gens_elapsed = 0
+            
+            # observations_per_strategy[current_strat_index] += 1
+            energy_collected_gen += 1
             receiver.nextPacket()
             
         elif 'size' in message:
             curr_sim_size = message[5:]
             obj_found_so_far = []
             trial_num = -1
+
+            strategy_f = open(f"../../graph-generation/collision-data/ga-info-{sim_type}-{curr_sim_size}.csv", 'a')
+            gene_df = open(f"../../graph-generation/collision-data/ga-gene-info-{sim_type}-{curr_sim_size}.csv", 'a')
             
+            # resets relevant statistics 
+            fitness = 0 # number of obstacles 
+            best_prev_genotype = '!'
+            best_prev_score = -1000
+            observations_per_strategy = [1, 1, 1, 1]
+            current_strat_index = 0
+            
+            t_elapsed_block_total = 0
             n_observations_block = 0 
+            energy_collected_gen = 1
             n_observations_robot = 0
+            num_better = 0 
+            
+            time_elapsed = 0 # on a per sec basis 
             overall_fitness = 0
+            
             found_something = False 
+            gens_elapsed = 0 
             
             receiver.nextPacket()
             
@@ -314,6 +615,16 @@ def interpret(timestep):
         elif message == 'clean finish': 
             cleaning = False 
             receiver.nextPacket() 
+            
+        elif 'comm_response' in message and str(message.split('-')[1]) == str(given_id) and communication: 
+        
+            print('updating orientation for', given_id, 'to', message.split('[')[1], 'for given id', given_id)
+            roll, pitch, yaw = inertia.getRollPitchYaw()
+            yaw = round(yaw, 2)
+            chosen_direction = float(message.split('[')[1])
+            orientation_found = False
+            receiver.nextPacket() 
+      
         
         else: 
             receiver.nextPacket()
@@ -321,20 +632,26 @@ def interpret(timestep):
     if receiver_individual.getQueueLength()>0:
         # message = receiver_individual.getData().decode('utf-8')
         message = receiver_individual.getString()
-
-        if 'episode-agent-complete' in message:
-            # reset agent info 
-            curr_action = [0,0] # set to nothing initially
+        
+        if 'child' in message and communication: 
+            next_child = message[5:].split("*")
+            num_better += 1
             receiver_individual.nextPacket()
-            # TODO: fill out with valid reset to agent actions
-
-        elif 'agent_action' in message: 
-            curr_action = [int(message.split(":")[-1].split(",")[0]), int(message.split(":")[-1].split(",")[1])]
-            print(f'recieved new action - {curr_action}')
+            
+        elif 'comm' in message and str(message.split('-')[1]) == str(given_id) and not 'comm_response' in message:
+            emitter.send(str(message).encode('utf-8'))
             receiver_individual.nextPacket()
+            
+        # if 'penalize' in message: 
+            # if t_elapsed_constant < 500: 
+                # t_elapsed_constant = t_elapsed_constant * 1.5 
+            
+            # receiver_individual.nextPacket()
+            
             
         else: 
             receiver_individual.nextPacket()
+
 
 def communicate_with_robot():
     global given_id 
@@ -346,7 +663,8 @@ def communicate_with_robot():
         emitter_individual.send(response.encode('utf-8'))
         prev_msg = response 
     # print('found neighbor')
-        
+    
+    
 def checkForCollectable(list_of_ids):
     collectables = 0
     for obj in list_of_ids: 
@@ -365,7 +683,7 @@ object_encountered = False
 prev_object_i = 0 # keep track of timesteps elapsed for each pickup action
 # global chosen_direction
 chosen_direction = rotate_random()
-# strategy = choose_strategy(chosen_direction, time_elapsed_since_block, time_elapsed_since_robot, weights, update = False)
+strategy = choose_strategy(chosen_direction, time_elapsed_since_block, time_elapsed_since_robot, weights, update = False)
 curr_index = 0
 initial_step_size = 500
 start_count = robot.getTime()
@@ -385,7 +703,8 @@ while robot.step(timestep) != -1 and sim_complete != True:
             if time_into_generation % 10 == 0: 
                 time_into_generation = 0
                 agent_observation = {'num_interactions': 0, 'num_objects_observed': 0, 'num_collisions':0}
-
+            # print('given id', given_id, 'updated time into generation + here dictionary', agent_observation['num_interactions'] , 'num collisions', agent_observation['num_collisions']) 
+        
         # homing mechanism 
         if holding_something == True and not reversing and not moving_forward: # move towards nest (constant vector towards home) 
             cd_x, cd_y = float(gps.getValues()[0]), float(gps.getValues()[1])
@@ -399,37 +718,46 @@ while robot.step(timestep) != -1 and sim_complete != True:
                 time_elapsed_since_block = 0
                 time_elapsed = 0 # on a per sec basis 
                 # print('successfully dropped off object', given_id)
+            
+        if curr_index >= len(strategy) and not holding_something and not reversing and not moving_forward: # maintain strategy for initial
+            curr_index = 0 
+            # used to determine when to update strategy 
+            print('completed strategy --', strategy, 'energy expenditure --', energy_expenditure(), 'for agent: ', given_id)
+            w = weights 
+            if using_high_dens and agent_observation['num_collisions'] > 0.3:
+                w = weights_high_density
 
-        # do action sequence 
-        cd_x, cd_y = float(gps.getValues()[0]), float(gps.getValues()[1])
-        # print(f'curr action {curr_action}')
-        if not holding_something and not reversing and not moving_forward and curr_action != []: 
-            goal_posx, goal_posy = curr_action[0] + cd_x, curr_action[0] + cd_y # TODO: not correct, but logic is there 
-            if math.dist([cd_x, cd_y], [goal_posx,goal_posy]) > 0.05:  
-                chosen_direction = round(math.atan2(-cd_y,-cd_x),2) 
-            else: # request new action 
-                msg = f'action-complete:{reward}'
-                emitter_individual.send(msg.encode('utf-8'))
+            if energy_expenditure() < 0: # update the weights based off success so far 
+                strategy = choose_strategy(chosen_direction, time_elapsed_since_block, time_elapsed_since_robot, w, update = True) # chooses a new strategy   
+                # time_elapsed = 0    
+            else: 
+                strategy = choose_strategy(chosen_direction, time_elapsed_since_block, time_elapsed_since_robot, w, update = False)
+                # time_elapsed = 0 
     
+        time_elapsed_since_robot +=1
+        # biased random walk movement (each time step, cert prob of turning that direction) 
         roll, pitch, yaw = inertia.getRollPitchYaw()
         yaw = round(yaw, 2)
+       
     
         if yaw != chosen_direction and orientation_found != True and object_encountered != True and not reversing: 
             begin_rotating()
             
-        # handles avoidance  
+            # handles avoidance  
         elif (i - back_i >= 50 and object_encountered != True and orientation_found == True and not reversing and moving_forward):
             moving_forward = False
             # proceeds with previous strategy 
             orientation_found = False 
             if not holding_something: 
-                chosen_direction = round(math.atan2(-cd_y,-cd_x),2) 
+                chosen_direction = strategy[curr_index]
+                # curr_index += 1
             
         elif (i - prev_i >= time_switch and object_encountered != True and orientation_found == True and not reversing):
             orientation_found = False 
             remove_orientations = [] 
             if not holding_something: 
-                chosen_direction = round(math.atan2(-cd_y,-cd_x),2) 
+                chosen_direction = strategy[curr_index]
+                curr_index += 1
         
         elif orientation_found != True and yaw == chosen_direction and object_encountered != True and not reversing: 
             orientation_found = True 
@@ -470,15 +798,15 @@ while robot.step(timestep) != -1 and sim_complete != True:
                 fitness += 1
         
             # communication threshold  
-            # if not holding_something and not reversing: # max value for light 
-                # if light_sensor.getValue() > 700 and light_sensor.getValue() < 900:
-                    # if time_into_generation != 0: 
-                        # agent_observation['num_interactions'] = (agent_observation['num_interactions'] + 1) / time_into_generation
-                    # if time_elapsed_since_robot > t_elapsed_constant: 
-                    #     communicate_with_robot()
-                    #     time_elapsed_since_robot = 0 # reset time step      
+            if not holding_something and not reversing: # max value for light 
+                if light_sensor.getValue() > 700 and light_sensor.getValue() < 900:
+                    if time_into_generation != 0: 
+                        agent_observation['num_interactions'] = (agent_observation['num_interactions'] + 1) / time_into_generation
+                    if time_elapsed_since_robot > t_elapsed_constant: 
+                        communicate_with_robot()
+                        time_elapsed_since_robot = 0 # reset time step      
                 # elif light_sensor.getValue() > 800: 
-                # time_elapsed_since_robot += 1 # increment every time (more interactions) 
+                time_elapsed_since_robot += 1 # increment every time (more interactions) 
                 
                 
             start_count = robot.getTime()  
@@ -491,6 +819,7 @@ while robot.step(timestep) != -1 and sim_complete != True:
                 # stop()
                 if (object_encountered == False):
                     # frequency of observing foragable objects 
+  
                     num_not_found = checkForCollectable(camera.getRecognitionObjects())
                     if time_into_generation != 0: 
                         agent_observation['num_objects_observed'] = ((agent_observation['num_objects_observed']*(time_into_generation-1)) + num_not_found) / time_into_generation
@@ -505,15 +834,13 @@ while robot.step(timestep) != -1 and sim_complete != True:
                             if prev_msg != id: 
                                 emitter.send(str(id).encode('utf-8'))
                                 prev_msg = id 
-                        # else: 
-                            # time_elapsed_since_block += 1 # on a per sec basis    
-                    # else: 
-                        # time_elapsed_since_block += 1 # on a per sec basis 
+                        else: 
+                            time_elapsed_since_block += 1 # on a per sec basis    
+                    else: 
+                        time_elapsed_since_block += 1 # on a per sec basis 
         i+=1
             
         pass
-
-
     
 # Enter here exit cleanup code.
 
@@ -565,244 +892,3 @@ while robot.step(timestep) != -1 and sim_complete != True:
             
         #     # make circular movements less likely 
         #     t_elapsed_constant = t_elapsed_constant // 2 # more likely to interact with other robots
-    
-
-            # if curr_index >= len(strategy) and not holding_something and not reversing and not moving_forward: # maintain strategy for initial
-        #     curr_index = 0 
-        #     # used to determine when to update strategy 
-        #     print('completed strategy --', strategy, 'energy expenditure --', energy_expenditure(), 'for agent: ', given_id)
-        #     w = weights 
-        #     if using_high_dens and agent_observation['num_collisions'] > 0.3:
-        #         w = weights_high_density
-
-        #     if energy_expenditure() < 0: # update the weights based off success so far 
-        #         strategy = choose_strategy(chosen_direction, time_elapsed_since_block, time_elapsed_since_robot, w, update = True) # chooses a new strategy   
-        #         # time_elapsed = 0    
-        #     else: 
-        #         strategy = choose_strategy(chosen_direction, time_elapsed_since_block, time_elapsed_since_robot, w, update = False)
-        #         # time_elapsed = 0         # if curr_index >= len(strategy) and not holding_something and not reversing and not moving_forward: # maintain strategy for initial
-        #     curr_index = 0 
-        #     # used to determine when to update strategy 
-        #     print('completed strategy --', strategy, 'energy expenditure --', energy_expenditure(), 'for agent: ', given_id)
-        #     w = weights 
-        #     if using_high_dens and agent_observation['num_collisions'] > 0.3:
-        #         w = weights_high_density
-
-        #     if energy_expenditure() < 0: # update the weights based off success so far 
-        #         strategy = choose_strategy(chosen_direction, time_elapsed_since_block, time_elapsed_since_robot, w, update = True) # chooses a new strategy   
-        #         # time_elapsed = 0    
-        #     else: 
-        #         strategy = choose_strategy(chosen_direction, time_elapsed_since_block, time_elapsed_since_robot, w, update = False)
-        #         # time_elapsed = 0 
-    
-
-# def identify_terrain(r,g,b):
-#     global terrains
-#     global current_terrain
-#     global prev_terrain 
-    
-#     prev_terrain = current_terrain 
-    
-#     if (int(r) > 170):
-#         # ugly hardcode to determine if on road 
-#         index = 0 
-#         current_terrain = terrains[1]
-        
-#     else: 
-#         current_terrain = terrains[0]
-    
-# strategy selection      
-# def choose_strategy(curr_dir, t_block, t_robot, original_weights, update = False):
-#     global curr_best_weights
-#     global given_id
-#     global strategy_f 
-#     global curr_sim_size
-#     global current_strat_index 
-#     global weights 
-    
-    
-#     # want to update weights based off effectiveness of current strategy 
-#     if update: 
-#         new_weights = create_new_weights(t_block, t_robot, original_weights)
-#         weights = new_weights 
-#         strat = random.choices(['straight','alternating-left','alternating-right', 'true random'], new_weights)[0]
-#         # print('current strat', strat)
-#         current_strat_index = ['straight','alternating-left','alternating-right', 'true random'].index(strat) 
-#         # strategy_f.write(str(given_id) + ','+ str(robot.getTime()) + ',' + str(original_weights[0]) + ',' + str(original_weights[1]) + ',' + str(original_weights[2]) + ',' + str(original_weights[3]) + ','+ str(t_block) + ',' + str(curr_sim_size) + ',' + str(calc_robot_fitness())+ ',' + str(curr_sim_size) + ',ga' +'\n')
-#         # strategy_f.close()
-#         # strategy_f = open("../../graph-generation/collision-data/ga-info.csv", 'a')
-
-#     if not update: 
-#         strat = random.choices(['straight','alternating-left','alternating-right', 'true random'], original_weights)[0]
-#         current_strat_index = ['straight','alternating-left','alternating-right', 'true random'].index(strat)
-    
-#     if strat == 'straight':
-#         return [curr_dir, curr_dir, curr_dir, curr_dir]
-#     elif strat == 'alternating-right':
-#         return [round(pi/2, 2), 0, round(-pi/2,2), round(pi,2)]
-#     elif strat == 'alternating-left':
-#         return [round(pi/2,2), round(pi,2), round(-pi/2,2), 0]
-#     else: #  correlated random
-#         return [correlated_random(curr_dir), correlated_random(curr_dir), correlated_random(curr_dir), correlated_random(curr_dir)]
-    
-    
-# def create_new_weights(t_block, t_robot, original_weights): 
-#     # print('original weights --', original_weights)
-#     global curr_best_weights
-#     global weights 
-#     global observations_per_strategy
-#     global total_observations 
-#     global current_strat_index
-#     global observations_per_strategy
-#     # want to incorporate some level of noise to avoid local max, instead of global
-#     # hope to ensure that good weights continue to persist in the pool 
-    
-#     if sum(observations_per_strategy) >= observations_threshold: 
-#         new_w = [observations_per_strategy[i] + 0.25 for i in range(len(observations_per_strategy))]
-#         new_w = [observations_per_strategy[i]/sum(observations_per_strategy) for i in range(len(observations_per_strategy))]
-#         return new_w
-    
-#     # want to set weights so more biased towards straight-line motion (no energy)  
-#     else: 
-#         adjust = 0.02
-#         original_weights[-1] = original_weights[-1] + adjust
-#         return [float(i)/sum(original_weights) for i in original_weights] 
-    
-# def calc_robot_fitness():
-#     global t_elapsed_block_total
-#     global n_observations_block
-#     global fitness 
-#     global obj_weight 
-#     global obstacle_weight
-    
-    
-#     if fitness != 0: 
-#         return obj_weight*(n_observations_block) + obstacle_weight*(1 / fitness) # + 0.5*agent_observation['num_objects_observed']
-#     else: 
-#         return obj_weight*(n_observations_block) # + 0.5*agent_observation['num_objects_observed']
-    
-#     # else: 
-#         # return 0 
-    
-# determines whether new strategy should be attempted based off given costs/benefits
-# another idea: reward forward movement (ie., coverage? )/ time spent to complete strategy, just not as much 
-# def energy_expenditure():
-#     global energy_per_item 
-#     global energy_cost 
-#     global energy_collected_gen 
-#     global time_elapsed 
-    
-#     if time_elapsed != 0: 
-#         return (energy_collected_gen*energy_per_item  - (energy_cost*time_elapsed))
-#     else: 
-#         return energy_collected_gen*energy_per_item # + (agent_observation['num_objects_observed']*energy_per_item)
-    
-# def parse_genotype(gen):
-    # global forward_speed 
-    # global energy_per_item 
-    # global energy_cost 
-    # global observations_threshold 
-    # global observations_threshold
-    # global curr_robot_genotype
-    
-    # curr_robot_genotype = gen
-    
-    # forward_speed = gen[0].count('1')
-    # if forward_speed < 5: 
-    #     forward_speed = 5
-    # energy_cost = gen[1].count('1')
-    # energy_per_item = gen[2].count('1')
-    # observations_threshold = gen[3].count('1')
-
-
-            # intertrial changes 
-        # if message[0:2] == "#" + str(given_id):
-        #     message = message[2:].split("*")
-        #     parse_genotype(message)
-        #     obj_found_so_far = []
-        #     n_observations_robot = 0
-        #     num_better = 0 
-        #     receiver.nextPacket()
-            
-        # elif message == "return_fitness": # happpens at end of generation 
-        #     if best_prev_genotype == '!': 
-        #         best_prev_genotype = 'none'
-            
-        #     response = "k" + str(int(given_id)) + "-fitness" + str(fitness) + '-other' + str(best_prev_genotype) + '-overall' + str(calc_robot_fitness())
-        #     # print('calculating fitness', calc_robot_fitness())
-        #     strategy_f.write(str(given_id) + ','+ str(robot.getTime()) + ',' + str(weights[0]) + ',' + str(weights[1]) + ',' + str(weights[2]) + ',' + str(weights[3]) + ','+ str(time_elapsed_since_block) + ',' + str(n_observations_robot)  + ',' + str(curr_sim_size) + ',' + str(calc_robot_fitness())+ ',' + str(curr_sim_size) + ',ga' + ',' + str(trial_num) + ',' + str(n_observations_block) + ',' + str(curr_robot_genotype) + ',' + str(num_better) + ',' + str(gps.getValues()[0]) + ',' + str(gps.getValues()[1]) + '\n')
-        #     strategy_f.close()
-        #     strategy_f = open(f"../../graph-generation/collision-data/ga-info-{sim_type}-{curr_sim_size}-comm_{communication}-dense_{using_high_dens}.csv", 'a')
-            
-        #     gene_df.write(str(given_id) + ','+ str(robot.getTime()) + ',' + str(trial_num) + ',' + str(curr_sim_size) + ',' + str(curr_robot_genotype) + '\n')
-        #     gene_df.close()
-        #     gene_df = open(f"../../graph-generation/collision-data/ga-gene-info-{sim_type}-{curr_sim_size}-comm_{communication}-dense_{using_high_dens}.csv", 'a')
-            
-        #     fitness = 0
-        #     overall_fitness = 0
-        #     best_prev_genotype = '!'
-        #     best_prev_score = -1000
-        #     num_better = 0 
-        #     time_into_generation = 0
-        #     agent_observation = {'num_interactions': 0, 'num_objects_observed': 0, 'num_collisions':0}
-        #     time_elapsed = 0 # on a per sec basis 
-           
-        #     # if next_child != "":
-        #     #     parse_genotype(next_child)
-        #         # print('current child', next_child)
-            
-        #     emitter.send(response.encode('utf-8'))
-        #     receiver.nextPacket()
-
-        # if message == 'sim-complete':
-        #     sim_complete = True 
-        #     strategy_f.close()
-        #     receiver.nextPacket()
-            
-        # elif 'trial' in message: 
-        #     # resets relevant statistics 
-        #     trial_num = int(message[5:])
-        #     print('end of trial, moving on to next trial', trial_num)
-        #     gens_elapsed = 0
-        #     fitness = 0 # number of obstacles 
-        #     best_prev_genotype = '!'
-        #     best_prev_score = -1000
-        #     observations_per_strategy = [1, 1, 1, 1]
-        #     weights = [0.25, 0.25, 0.25, 0.25] 
-
-        #     weights_high_density = [0.25, 0.25, 0.25, 0.25] 
-        #     observations_per_strategy_high_dens = [1, 1, 1, 1] # num successes using each (set to 1 so that there is still likelihood for gathering strategy) 
-            
-        #     current_strat_index = 0
-            
-        #     t_elapsed_block_total = 0
-        #     n_observations_block = 0
-        #     n_observations_robot = 0
-            
-        #     energy_collected_gen = 1
-        #     num_better = 0 
-            
-        #     found_something = False 
-        #     gens_elapsed = 0 
-            
-        #     time_elapsed = 0 # on a per sec basis 
-        #     overall_fitness = 0
-        #     # holding_something = False 
-        #     obj_found_so_far = []
-        #     curr_index = 0 
-        #     remove_orientations = []
-            
-        #     receiver.nextPacket()
-    
-# environment statistics garnered 
-# time_elapsed_since_block = 0 
-# time_elapsed_since_robot = 0
-# t_elapsed_constant = 10
-# weights = [0.25, 0.25, 0.25, 0.25] 
-# observations_per_strategy = [1, 1, 1, 1] # num successes using each (set to 1 so that there is still likelihood for gathering strategy) 
-# total_observations = sum(observations_per_strategy)
-# weights_high_density = [0.25, 0.25, 0.25, 0.25] 
-# observations_per_strategy_high_dens = [1, 1, 1, 1] # num successes using each (set to 1 so that there is still likelihood for gathering strategy) 
-# total_observations_high_dense = sum(observations_per_strategy_high_dens)
-# current_strat_index = 0 # set arbitrarily 
-# curr_best_weights = [] # set initially as empty 
