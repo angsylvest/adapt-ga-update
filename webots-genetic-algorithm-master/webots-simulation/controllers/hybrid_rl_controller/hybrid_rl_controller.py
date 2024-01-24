@@ -164,6 +164,13 @@ time_into_generation = 0
 using_artificial_field = False
 remove_orientations = []
 
+# rl relevant information for agent 
+observation = []
+curr_action = []
+reward = 0 
+goal_posx = ""
+goal_posy = ""
+
 def identify_terrain(r,g,b):
     global terrains
     global current_terrain
@@ -440,6 +447,10 @@ def interpret(timestep):
     global curr_index 
     global remove_orientations
 
+    global curr_action 
+    global goal_posx
+    global goal_posy
+
     
     if receiver.getQueueLength()>0:
         # message = receiver.getData().decode('utf-8')
@@ -647,6 +658,19 @@ def interpret(timestep):
                 # t_elapsed_constant = t_elapsed_constant * 1.5 
             
             # receiver_individual.nextPacket()
+
+        elif 'episode-agent-complete' in message:
+            # reset agent info 
+            curr_action = [0,0] # set to nothing initially
+            receiver_individual.nextPacket()
+            # TODO: fill out with valid reset to agent actions
+
+        elif 'agent_action' in message: 
+            curr_action = [int(message.split(":")[-1].split(",")[0]), int(message.split(":")[-1].split(",")[1])]
+            goal_posx, goal_posy = curr_action[0] + cd_x, curr_action[0] + cd_y # TODO: not correct, but logic is there 
+            # print(message)
+            # print(f'recieved new action - {curr_action}')
+            receiver_individual.nextPacket()
             
             
         else: 
@@ -672,6 +696,13 @@ def checkForCollectable(list_of_ids):
         if id not in obj_found_so_far:
             collectables += 1
     return collectables 
+
+def reward():
+    # TODO: fill with correct information 
+    global fitness # num collisions
+    global n_observations_block
+
+    return num_observations - (fitness)
 
 # controller tracker variables 
 i = 0 
@@ -718,7 +749,20 @@ while robot.step(timestep) != -1 and sim_complete != True:
                 time_elapsed_since_block = 0
                 time_elapsed = 0 # on a per sec basis 
                 # print('successfully dropped off object', given_id)
-            
+
+        # ---- do action sequence ---
+        # cd_x, cd_y = float(gps.getValues()[0]), float(gps.getValues()[1])
+        # if not holding_something and not reversing and not moving_forward and curr_action != []: 
+        #     # goal_posx, goal_posy = curr_action[0] + cd_x, curr_action[0] + cd_y # TODO: not correct, but logic is there 
+        #     if math.dist([cd_x, cd_y], [goal_posx,goal_posy]) > 0.05:  
+        #         chosen_direction = round(math.atan2(goal_posy-cd_y,goal_posx-cd_x),2) 
+        #     else: # request new action 
+        #         # print(f'successfully reached next pos: {goal_posx}, {goal_posy} with dis {math.dist([cd_x, cd_y], [goal_posx,goal_posy])}')
+        #         rew = reward()
+        #         msg = f'action-complete:{rew}'
+        #         emitter_individual.send(msg.encode('utf-8'))
+
+
         if curr_index >= len(strategy) and not holding_something and not reversing and not moving_forward: # maintain strategy for initial
             curr_index = 0 
             # used to determine when to update strategy 

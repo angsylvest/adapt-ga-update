@@ -7,6 +7,10 @@ import random
 import sys 
 sys.path.append('../../')
 import utils.environment as env_mod 
+from utils.rl_agent import *
+from utils.ppo import * 
+from utils.nn import * 
+from utils.rl_wrapper import * 
 
 from math import pi
 
@@ -93,6 +97,17 @@ central = True
 
 # generate envs 
 curr_env = env_mod.Environment(env_type=env_type, seed = seed_val)
+
+# hyperparameters 
+timesteps_per_batch = 60 # 4800 
+max_timesteps_per_episode = 30 # TODO: change to 600 once troubleshooted 
+n_updates_per_iteration = 5
+lr = 0.005
+gamma = 0.95
+clip = 0.2
+total_timesteps = 200000000
+act_list = []
+updating = True
 
 # set up environments 
 def generate_robot_central(num_robots):
@@ -354,6 +369,7 @@ def message_listener(time_step):
     global start 
     global simulation_time
     global prev_msg 
+    global updating
 
     if receiver.getQueueLength()>0 and (robot.getTime() - start < simulation_time):
         # message = receiver.getData().decode('utf-8')
@@ -420,6 +436,10 @@ def message_listener(time_step):
 
             receiver.nextPacket()
             
+        elif 'update-complete' in message: 
+            updating = False 
+            receiver.nextPacket()
+
         else: 
             receiver.nextPacket() 
             
@@ -547,7 +567,64 @@ def reset_genotype():
             prev_msg = msg
         index +=1 
           
-    
+
+def rollout_and_update():
+    global population 
+    global max_timesteps_per_episode
+    global found_list 
+
+    # batch data 
+    # batch_obs = []
+    # batch_acts = []
+    # batch_log_probs = []
+    # batch_rews = []
+    # batch_rtgs = []
+    # batch_lens = []
+
+    # ep_rews = 0 
+    t = 0 
+
+    while t < timesteps_per_batch: 
+        # ep_rews = []
+        # obs = [i.getField('translation') for i in population]
+        # done = False
+
+        run_seconds(max_timesteps_per_episode) # gather info from sim for each agent 
+        print('completed run of episode')
+        t += max_timesteps_per_episode
+
+        # for ep_t in range(max_timesteps_per_episode): 
+        #     # would want to run sim for this time 
+        #     t += 1 
+            # batch_obs.append[obs] # list of agent obs (positions)
+
+            # # request to calc action (for each agent)
+            # msg = 'action-request'
+            # emitter.send(msg.encode('utf-8'))
+
+        msg = 'episode-complete' # will reset agent 
+        emitter_individual.send(msg.encode('utf-8'))
+
+        # TODO: reset env here correctly 
+        regenerate_blocks(seed = 11)
+        
+        found_list = []
+
+    run_seconds(1)
+
+    updating = True 
+    msg = 'updating-network'
+    emitter_individual.send(msg.encode('utf-8'))
+
+    while updating: 
+        run_seconds(1) 
+        message_listener(0) # TODO: remove var if not useful
+
+
+
+# return batch_obs, batch_acts, batch_log_probs, batch_lens # TODO: actually use these? 
+
+# TODO: rollout not used in hybrid yet 
 def run_optimization():
     global pop_genotypes 
     global gene_list 
@@ -653,6 +730,10 @@ def run_optimization():
             total_found = 0 
             reproduce_list = []
             found_list = []
+
+            # msg = 'episode-complete' # will reset agent 
+            # emitter_individual.send(msg.encode('utf-8'))
+
             msg = 'trial' + str(i)
             emitter.send(msg.encode('utf-8')) 
             prev_msg = msg

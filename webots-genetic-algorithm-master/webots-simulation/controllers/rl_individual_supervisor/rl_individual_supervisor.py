@@ -222,6 +222,9 @@ def message_listener(time_step):
             print(f'initial action for agent {assigned_r_name} with action : {curr_action} for {type(curr_action)}')
             # discretized_action = np.argmax(curr_action).item() # TODO: might not be correct, index of the maximum value in your continuous vector as a discrete action
             curr_action = env._action_to_direction[int(curr_action[0])]
+
+            msg = 'agent_action:'+ str(curr_action[0]) + "," + str(curr_action[1])
+            emitter_individual.send(msg.encode('utf-8'))
             # Agent.action = curr_action 
             # batch
             
