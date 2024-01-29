@@ -272,11 +272,11 @@ class PPO():
         batch_acts shape: (num ts in batch, dim of action)
         """
         V = self.critic(batch_obs).squeeze() # should be same size as batch_rtgs
-        print(f'critic output from evaluate(): {V.shape}')
+        # print(f'critic output from evaluate(): {V.shape}')
 
         # calc log probabilities 
         mean = self.actor(batch_obs)
-        print(f'mean from self.actor: {mean.shape}')
+        # print(f'mean from self.actor: {mean.shape}')
         # dist = MultivariateNormal(mean, self.cov_mat)
         
         dist = torch.distributions.Categorical(logits=mean)
@@ -286,12 +286,12 @@ class PPO():
 
         
         # Assuming mean has shape (batch_size, num_actions)
-        print(f' batch acts shape -- {batch_acts.shape}' )
-        print(batch_acts)
+        # print(f' batch acts shape -- {batch_acts.shape}' )
+        # print(batch_acts)
         # target_values = batch_acts[:, 0].long()
         # print(f'target values: {target_values}')
         
-        print(f'dist output: {dist}')
+        # print(f'dist output: {dist}')
         log_probs = dist.log_prob(batch_acts)
         
         # log_probs = F.cross_entropy(mean, batch_acts[:, 0].long(), reduction='none') # with batches, instead of just 1 obs

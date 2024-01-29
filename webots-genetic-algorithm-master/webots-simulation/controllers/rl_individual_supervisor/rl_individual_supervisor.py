@@ -10,6 +10,7 @@ from utils.rl_agent import *
 from utils.ppo import * 
 from utils.nn import * 
 from utils.rl_wrapper import * 
+import utils.global_var as globals
 
 # from controllers.pure_rl_supervisor.pure_rl_supervisor import ex
 
@@ -243,28 +244,28 @@ def message_listener(time_step):
             # model.learn_adjusted(batch_observations, batch_acts, batch_log_probs, batch_rtgs, batch_lens) # TODO: update 
             # msg = 'update-complete'
 
-            # reset each batch 
-            # batch_observations = []
-            # batch_actions = []
-            # ep_rews = []
-            # batch_log_probs = [] 
-            # batch_lens = [] 
+            # if empty, will tmp add something
+            # batch_observations = [()]
+            # batch_actions = [()]
+            # print(ep_rews)
             # curr_index = 0
             
             # TODO: need to make work across episodes updated code with corrections 
-            print(f'init batch sizes \n batch_observations: {len(batch_observations)} \n batch_actions: {len(batch_actions)}')
-            print('batch actions --', batch_actions)
+            # print(f'init batch sizes \n batch_observations: {len(batch_observations)} \n batch_actions: {len(batch_actions)}')
+            # print('batch actions --', batch_actions)
             batch_observations = torch.tensor(batch_observations, dtype = torch.float)
             batch_acts = torch.tensor(batch_actions, dtype = torch.float)
             batch_log_probs = torch.tensor(batch_log_probs, dtype = torch.float)
             # print('intial batch_rewards - ', batch_rewards)
-            # batch_rewards.append(ep_rews) # TODO: do i need this? 
-            print('final batch_rewards - ', len(batch_rewards[0]))
+
+            # if not globals.use_batch: 
+            #     batch_rewards.append(ep_rews) # TODO: do i need this? 
+            # print('final batch_rewards - ', len(batch_rewards))
             batch_rtgs = model.compute_rtgs(batch_rewards) # TODO: should be batch_rewards instead of ep_rews
             batch_lens = [600] # TODO: update so correct 
             # print('converted to torch')
             # print(f'info updates : \n batch_observations: {batch_observations} \n batch_actions: {batch_acts} \n ep_rews: {ep_rews} \n batch_rtgs: {batch_rtgs}') 
-            print(f'batch info dims: \n batch_observations: {batch_observations.shape} \n batch_actions: {batch_acts.shape} \n batch_rtgs: {batch_rtgs.shape}')
+            # print(f'batch info dims: \n batch_observations: {batch_observations.shape} \n batch_actions: {batch_acts.shape} \n batch_rtgs: {batch_rtgs.shape}')
             
             model.learn_adjusted(batch_observations, batch_acts, batch_log_probs, batch_rtgs, batch_lens) # TODO: update 
             print('updated model')

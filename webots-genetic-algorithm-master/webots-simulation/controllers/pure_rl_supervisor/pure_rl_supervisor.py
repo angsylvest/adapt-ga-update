@@ -11,6 +11,7 @@ from utils.rl_agent import *
 from utils.ppo import * 
 from utils.nn import * 
 from utils.rl_wrapper import * 
+import utils.global_var as globals
 
 from math import pi
 
@@ -420,6 +421,16 @@ def rollout():
 
         msg = 'episode-complete' # will reset agent 
         emitter_individual.send(msg.encode('utf-8'))
+
+        if not globals.use_batch:
+            print('updating model after episode')
+            updating = True 
+            msg = 'updating-network'
+            emitter_individual.send(msg.encode('utf-8'))
+
+            while updating: 
+                run_seconds(1) 
+                message_listener(0) # TODO: remove var if not useful
 
         # TODO: reset env here correctly 
         regenerate_blocks(seed = 11)
