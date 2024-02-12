@@ -17,7 +17,10 @@ import random
 import sys 
 sys.path.append('../../')
 import utils
-from utils.global_var import *
+import utils.global_var as globals
+
+batch = globals.use_batch
+online = globals.online
 
 # create the Robot instance.
 robot = Robot()
@@ -94,10 +97,9 @@ obj_found_so_far = []
 curr_sim_size = 5
 repopulate = False 
 
-sim_type = "random" 
-communication = False 
-using_high_dens = True 
-
+sim_type = globals.sim_type
+communication = globals.communication 
+using_high_dens = globals.using_high_dense 
 
 terrains = ['normal', 'road']
 current_terrain = terrains[0] # either normal or road 

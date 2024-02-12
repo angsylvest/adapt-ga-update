@@ -53,16 +53,17 @@ simulation_time = 30
 # curr_trial = 0 
 robot_population_sizes = [2]
 # gene_list = ['control speed 10', 'energy cost 5', 'food energy 30', 'observations thres 5']
-# curr_size = robot_population_sizes[0]
+curr_size = robot_population_sizes[0]
 env_type = "single source" # "power law"
 sim_type = "random"
 communication = True
 high_dense = True
 
 # # collected counts csv generation 
-# overall_f = open(f'../../graph-generation/collection-data/overall-df-{sim_type}-{curr_size}-comm_{communication}-dense_{high_dense}.csv', 'w')
-# overall_columns = 'trial' + ',time' + ',objects retrieved' + ',size' + ',type' + ',potential time' + ',total elapsed'
-# overall_f.write(str(overall_columns) + '\n')
+overall_f = open(f'../../graph-generation/collection-data/overall-df-{sim_type}-{curr_size}.csv', 'w')
+overall_columns = 'trial' + ',time' + ',objects retrieved' + ',size' 
+overall_f.write(str(overall_columns) + '\n')
+
 # overall_f.close()
 # overall_f = open(f'../../graph-generation/collection-data/overall-df-{sim_type}-{curr_size}-comm_{communication}-dense_{high_dense}.csv', 'a')
 
@@ -113,7 +114,7 @@ curr_env = env_mod.Environment(env_type=env_type, seed = seed_val)
 # individual PPO model for each agent 
 hyperparamters = {}
 env = ForagingEnv()
-model = PPO(FeedForwardNN, env, **hyperparamters)
+# model = PPO(FeedForwardNN, env, **hyperparamters)
 
 
 # set up environments 
@@ -446,6 +447,7 @@ def run_optimization():
     global robot_population_sizes
     global ind_sup
     global updating 
+    global overall_f
     
     for size in robot_population_sizes:
         curr_size = size  
@@ -483,7 +485,14 @@ def run_optimization():
             run_seconds(1)
 
             updating = True 
-            msg = 'updating-network'
+            msg = 'updating-network' + str("-i_so_far")
+
+            # update csv with updated stat info 
+            overall_f.write(str(i_so_far) + ',' + str(robot.getTime()) + ',' + str(total_found) + ',' + str(size) + '\n')    
+            overall_f.close()
+            overall_f = open(f'../../graph-generation/collection-data/overall-df-{sim_type}-{curr_size}-comm_{communication}-dense_{high_dense}.csv', 'a')
+            print('items collected', total_found)
+
             emitter_individual.send(msg.encode('utf-8'))
 
             while updating: 
@@ -491,6 +500,7 @@ def run_optimization():
                 message_listener(0) # TODO: remove var if not useful
 
             # t_so_far += np.sum(batch_lens) # TODO: find way to extract this
+            i_so_far += 1
 
             # TODO: need way to pause simulation while this calculation is happening 
             # run_seconds(1)

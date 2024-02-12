@@ -6,14 +6,22 @@ import time
 
 from torch.optim import Adam
 from torch.distributions import MultivariateNormal
+import matplotlib.pyplot as plt
+
 
 import torch.nn.functional as F
+
+import sys 
+sys.path.append('../../')
+import utils.global_var as globals
+online = globals.online
+use_batch = globals.use_batch
 
 """Majority taken from PPO-for-Beginners github repo"""
 
 
 class PPO():
-    def __init__(self, policy_class, env, **hyperparameters):
+    def __init__(self, policy_class, env, agent_info, **hyperparameters):
         # validate that env is compatible (most likely gym)
         
         print(f'PPO env type {type(env.observation_space[0])}')
@@ -31,6 +39,11 @@ class PPO():
         
         # self.act_dim = env.action_space[0].shape[0]
         self.act_dim = env.action_space[0].n # is 4 now
+        self.agent_info = agent_info
+        # update graph for agent 
+        self.graph_path = self.agent_info["path"]
+        self.avg_rewards_over_time = []
+
 
         # initialize actor and critic 
         self.actor = policy_class(self.obs_dim, self.act_dim)
@@ -54,7 +67,7 @@ class PPO():
             'actor_losses': [],     # losses of actor network in current iteration
         }
 
-
+    # TODO: eventually get rid of, this is not used...
     def learn(self, total_timesteps):
         # training actor and critic networks 
         t_so_far = 0  # ts simulated so far 
@@ -162,6 +175,7 @@ class PPO():
             # log actor loss 
             self.logger['actor_losses'].append(actor_loss.detach())
 
+
         # print training performance so far 
         self._log_summary()
 
@@ -199,6 +213,8 @@ class PPO():
 
                 # calc action + make step in env 
                 action, log_prob = self.get_action()
+
+                # TODO: need way to acquire this info without needing step 
                 obs, rew, done, _ = self.env.step(action)
 
                 # track reward, action, action log probabilities 
@@ -361,6 +377,17 @@ class PPO():
         avg_ep_lens = str(round(avg_ep_lens, 2))
         avg_ep_rews = str(round(avg_ep_rews, 2))
         avg_actor_loss = str(round(avg_actor_loss, 5))
+
+        print(f"batch rews: {self.logger['batch_rews']}")
+        self.avg_rewards_over_time.append(avg_ep_rews)
+        plt.plot(self.avg_rewards_over_time)
+        plt.xlabel('Iterations')
+        plt.ylabel('Average Reward')
+        plt.title('Average Reward Over Time')
+        plt.grid(True)
+        plt.savefig(self.graph_path + 'avg_reward_over_time.png')  # Save the plot
+        # plt.show()
+
 
         # Print logging statements
         print(flush=True)

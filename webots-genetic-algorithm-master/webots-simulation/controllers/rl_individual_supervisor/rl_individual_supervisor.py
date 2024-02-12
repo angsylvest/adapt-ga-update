@@ -42,9 +42,15 @@ Agent = RLAgent()
 # Agent.set_location((population[given_id].getPosition()[0], population[given_id].getPosition()[1]))
 
 # individual PPO model for each agent 
+batch = globals.use_batch
+online = globals.online
+sim_type = globals.sim_type
+communication = globals.communication 
+using_high_dens = globals.using_high_dense 
 hyperparamters = {}
+agent_info = {"path": f"../../graph-generation/collection-data/env_{sim_type}_batch_{batch}_online_{online}_agent_{assigned_r_name}"}
 env = ForagingEnv()
-model = PPO(FeedForwardNN, env, **hyperparamters)
+model = PPO(FeedForwardNN, env, agent_info, **hyperparamters)
     
 #### allow personal supervisor to send important encounter info back to supervisor ## 
 emitter = robot.getDevice("emitter")
@@ -93,6 +99,7 @@ curr_index = 0
 prev_pos = ()
 agent_pos = ()
 prev_population_pos = []
+
 
 
 def generate_vector(agent_pos, prev_pos, prev_population_pos):
@@ -253,6 +260,7 @@ def message_listener(time_step):
             # batch_rtgs = model.compute_rtgs(batch_rewards)
             # batch_lens = [] # TODO: update so correct 
             
+            # iter = int(message.split("-")[-1])
             
             # model.learn_adjusted(batch_observations, batch_acts, batch_log_probs, batch_rtgs, batch_lens) # TODO: update 
             # msg = 'update-complete'
@@ -361,31 +369,31 @@ def update_batch_info():
         batch_log_probs.append(Agent.log_prob)
         # print(f'info updates : \n batch_observations: {batch_observations} \n batch_actions: {batch_actions} \n ep_rews: {ep_rews}') 
 
-        # TODO: delete eventually .. testing network update 
-        # if len(batch_observations) > 0: 
-            # batch_observations = torch.tensor(batch_observations, dtype = torch.float)
-            # batch_acts = torch.tensor(batch_actions, dtype = torch.float)
-            # batch_log_probs = torch.tensor(batch_log_probs, dtype = torch.float)
-            # print('intial batch_rewards - ', batch_rewards)
-            # batch_rewards.append(ep_rews)
-            # print('final batch_rewards - ', batch_rewards)
-            # batch_rtgs = model.compute_rtgs(batch_rewards) # TODO: should be batch_rewards instead of ep_rews
-            # batch_lens = [600] # TODO: update so correct 
-            # print('converted to torch')
-            # print(f'info updates : \n batch_observations: {batch_observations.shape} \n batch_actions: {batch_acts.shape} \n ep_rews: {ep_rews} \n batch_rtgs: {batch_rtgs}') 
+        # TODO: delete eventually .. testing network update (NOT WORKING YET)
+        if len(batch_observations) > 0 and online: 
+            batch_observations = torch.tensor(batch_observations, dtype = torch.float)
+            batch_acts = torch.tensor(batch_actions, dtype = torch.float)
+            batch_log_probs = torch.tensor(batch_log_probs, dtype = torch.float)
+            print('intial batch_rewards - ', batch_rewards)
+            batch_rewards.append(ep_rews)
+            print('final batch_rewards - ', batch_rewards)
+            batch_rtgs = model.compute_rtgs(batch_rewards) # TODO: should be batch_rewards instead of ep_rews
+            batch_lens = [600] # TODO: update so correct 
+            print('converted to torch')
+            print(f'info updates : \n batch_observations: {batch_observations.shape} \n batch_actions: {batch_acts.shape} \n ep_rews: {ep_rews} \n batch_rtgs: {batch_rtgs}') 
             
             
-            # model.learn_adjusted(batch_observations, batch_acts, batch_log_probs, batch_rtgs, batch_lens) # TODO: update 
-            # print('updated model')
+            model.learn_adjusted(batch_observations, batch_acts, batch_log_probs, batch_rtgs, batch_lens, 0) # TODO: update 
+            print('updated model')
             
             # reset each batch 
-            # batch_observations = []
-            # batch_actions = []
-            # ep_rews = []
-            # batch_log_probs = [] 
-            # batch_lens = [] 
-            # curr_index = 0
-            # batch_rewards = []
+            batch_observations = []
+            batch_actions = []
+            ep_rews = []
+            batch_log_probs = [] 
+            batch_lens = [] 
+            curr_index = 0
+            batch_rewards = []
             
             
         
