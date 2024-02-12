@@ -78,6 +78,14 @@ light_sensor.enable(timestep)
 
 # initial genotype parameters 
 forward_speed = 5
+
+# TODO: if this is changing, need way to include function 
+# using proportionality with forward_speed of 5 to alter size of vector 
+ratio = 0.12
+base = 0.180 
+norm = (forward_speed - 5) # 5 is the slowest you can go  
+forward_per_sec = ratio*norm + base 
+            
 # detect_thres = 1000
 time_switch = 200
 
@@ -173,11 +181,18 @@ def calc_normal(curr_angle):
         return round(-1*round(pi/2, 2),2)
          
 def reward():
-    # TODO: fill with correct information 
+    # priorities in foraging task 
+    # 1. num collected using strat 
+    # 2. num collisions  
     global fitness # num collisions
     global n_observations_block
-
-    return num_observations - (fitness)
+    
+    
+    if fitness != 0: 
+        return num_observations + ((1/fitness)*1.5)
+    else: 
+        return num_observations + 1.5 
+        
     
 # direction selection 
 def rotate_random():
@@ -286,6 +301,9 @@ def interpret(timestep):
     global goal_posx
     global goal_posy
     
+    global forward_per_sec
+    global prev_act
+    
     if receiver.getQueueLength()>0:
         message = receiver.getString()
         # print('incoming messages: ', given_id, message) 
@@ -335,9 +353,11 @@ def interpret(timestep):
 
         elif 'agent_action' in message: 
             curr_action = [int(message.split(":")[-1].split(",")[0]), int(message.split(":")[-1].split(",")[1])]
+            curr_action = [(curr_action[0] * forward_per_sec), (curr_action[1] * forward_per_sec)]
+            
             goal_posx, goal_posy = curr_action[0] + cd_x, curr_action[0] + cd_y # TODO: not correct, but logic is there 
             # print(message)
-            # print(f'recieved new action - {curr_action}')
+            # print(f'recieved new action - {curr_action} with curr time {robot.getTime()}')
             receiver_individual.nextPacket()
             
         else: 
@@ -379,19 +399,21 @@ start_count = robot.getTime()
 reversing = False 
 moving_forward = False  
 cleaning = False
-prev_gen_check = robot.getTime()
+prev_gen_check = robot.getTime() 
+prev_act = ""
 
 while robot.step(timestep) != -1 and sim_complete != True:
     
     if not cleaning: 
         interpret(str(robot.step(timestep)))
-        
+
         if robot.getTime() - prev_gen_check == 1: 
             prev_gen_check = robot.getTime()
             time_into_generation += 1
             if time_into_generation % 10 == 0: 
                 time_into_generation = 0
                 agent_observation = {'num_interactions': 0, 'num_objects_observed': 0, 'num_collisions':0}
+            # print(f'curr pos: {cd_x}, {cd_y}')
 
         # homing mechanism 
         if holding_something == True and not reversing and not moving_forward: # move towards nest (constant vector towards home) 
@@ -414,7 +436,7 @@ while robot.step(timestep) != -1 and sim_complete != True:
             if math.dist([cd_x, cd_y], [goal_posx,goal_posy]) > 0.05:  
                 chosen_direction = round(math.atan2(goal_posy-cd_y,goal_posx-cd_x),2) 
             else: # request new action 
-                # print(f'successfully reached next pos: {goal_posx}, {goal_posy} with dis {math.dist([cd_x, cd_y], [goal_posx,goal_posy])}')
+                # print(f'successfully reached next pos: {goal_posx}, {goal_posy} with dis {math.dist([cd_x, cd_y], [goal_posx,goal_posy])} with curr time {robot.getTime()}')
                 rew = reward()
                 msg = f'action-complete:{rew}'
                 emitter_individual.send(msg.encode('utf-8'))

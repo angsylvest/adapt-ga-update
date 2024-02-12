@@ -90,6 +90,13 @@ update_sec = 1
 num_updates_per_episode = 600 # 1 per second 
 curr_index = 0
 
+prev_pos = ()
+agent_pos = ()
+prev_population_pos = []
+
+
+def generate_vector(agent_pos, prev_pos, prev_population_pos):
+    pass 
 
 
 # based off given id of robot assigned 
@@ -142,6 +149,10 @@ def message_listener(time_step):
     global batch_lens
     global Agent
     global curr_index
+    
+    global prev_pos
+    global agent_pos
+    global prev_population_pos
 
 
     if receiver.getQueueLength()>0:
@@ -154,6 +165,8 @@ def message_listener(time_step):
             for id in id_msg: # will convert to nodes to eventual calculation 
                 node = robot.getFromId(int(id))
                 population.append(node)
+                
+                
                 
             Agent.set_id(assigned_r_name)
             Agent.set_location((population[given_id].getPosition()[0], population[given_id].getPosition()[1]))
