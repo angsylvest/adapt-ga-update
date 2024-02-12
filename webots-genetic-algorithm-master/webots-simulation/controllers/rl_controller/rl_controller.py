@@ -191,9 +191,9 @@ def reward():
     
     
     if fitness != 0: 
-        return num_observations + ((1/fitness)*1.5)
+        return n_observations_block + ((1/fitness)*1.5)
     else: 
-        return num_observations + 1.5 
+        return n_observations_block + 1.5 
         
     
 # direction selection 
@@ -358,6 +358,18 @@ def interpret(timestep):
             curr_action = [(curr_action[0] * forward_per_sec), (curr_action[1] * forward_per_sec)]
             
             goal_posx, goal_posy = curr_action[0] + cd_x, curr_action[0] + cd_y # TODO: not correct, but logic is there 
+            
+            # Bound goal_posx between -1 and 1
+            if goal_posx < -1:
+                goal_posx = -1
+            elif goal_posx > 1:
+                goal_posx = 1
+            
+            # Bound goal_posy between -1 and 1
+            if goal_posy < -1:
+                goal_posy = -1
+            elif goal_posy > 1:
+                goal_posy = 1
             # print(message)
             # print(f'recieved new action - {curr_action} with curr time {robot.getTime()}')
             receiver_individual.nextPacket()
@@ -425,9 +437,9 @@ while robot.step(timestep) != -1 and sim_complete != True:
                 
             else: 
                 holding_something = False
-                t_elapsed_block_total += time_elapsed_since_block 
+                # t_elapsed_block_total += time_elapsed_since_block 
                 # n_observations_block += 1
-                time_elapsed_since_block = 0
+                # time_elapsed_since_block = 0
                 time_elapsed = 0 # on a per sec basis 
                 # print('successfully dropped off object', given_id)
 

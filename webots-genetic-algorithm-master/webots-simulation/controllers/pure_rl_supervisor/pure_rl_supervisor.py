@@ -31,7 +31,7 @@ population_array = []
 num_agents = 2
 
 # hyperparameters 
-timesteps_per_batch = 60 # 4800 
+timesteps_per_batch = 4800 
 max_timesteps_per_episode = 30 # TODO: change to 600 once troubleshooted 
 n_updates_per_iteration = 5
 lr = 0.005
@@ -51,7 +51,7 @@ collected_count = []
 simulation_time = 30
 # trials = 25
 # curr_trial = 0 
-robot_population_sizes = [2]
+robot_population_sizes = [1]
 # gene_list = ['control speed 10', 'energy cost 5', 'food energy 30', 'observations thres 5']
 curr_size = robot_population_sizes[0]
 env_type = "single source" # "power law"
@@ -332,6 +332,7 @@ def message_listener(time_step):
     if receiver.getQueueLength()>0 and (robot.getTime() - start < simulation_time):
         # message = receiver.getData().decode('utf-8')
         message = receiver.getString()
+        # print('supervisor msgs --', message)
         
         if message[0] == "$": # handles deletion of objects when grabbed
             obj_node = robot.getFromId(int(message.split("-")[1]))
@@ -371,18 +372,18 @@ def message_listener(time_step):
         else: 
             receiver.nextPacket() 
             
-    elif (robot.getTime() - start > simulation_time and prev_msg != 'clean finish'):
+    # elif (robot.getTime() - start > simulation_time and prev_msg != 'clean finish'):
     # if over time would want to reset 
-        msg = 'cleaning'
-        if prev_msg != msg: 
-            emitter.send('cleaning'.encode('utf-8'))
-            prev_msg = msg
-        while receiver.getQueueLength()>0: 
-            receiver.nextPacket()
-        msg = 'clean finish'
-        if prev_msg != msg: 
-            emitter.send('clean finish'.encode('utf-8'))
-            prev_msg = msg 
+        # msg = 'cleaning'
+        # if prev_msg != msg: 
+            # emitter.send('cleaning'.encode('utf-8'))
+            # prev_msg = msg
+        # while receiver.getQueueLength()>0: 
+            # receiver.nextPacket()
+        # msg = 'clean finish'
+        # if prev_msg != msg: 
+            # emitter.send('clean finish'.encode('utf-8'))
+            # prev_msg = msg 
         
 
 
@@ -390,6 +391,7 @@ def rollout():
     global population 
     global max_timesteps_per_episode
     global found_list 
+    global updating
 
     # batch data 
     # batch_obs = []
@@ -422,9 +424,10 @@ def rollout():
 
         msg = 'episode-complete' # will reset agent 
         emitter_individual.send(msg.encode('utf-8'))
+        # print(globals.use_batch)
 
         if not globals.use_batch:
-            print('updating model after episode')
+            # print('updating model after episode')
             updating = True 
             msg = 'updating-network'
             emitter_individual.send(msg.encode('utf-8'))
@@ -432,7 +435,10 @@ def rollout():
             while updating: 
                 run_seconds(1) 
                 message_listener(0) # TODO: remove var if not useful
+            # print('completed update')
 
+        run_seconds(1) 
+        
         # TODO: reset env here correctly 
         regenerate_blocks(seed = 11)
         
@@ -485,7 +491,7 @@ def run_optimization():
             run_seconds(1)
 
             updating = True 
-            msg = 'updating-network' + str("-i_so_far")
+            msg = 'updating-network' 
 
             # update csv with updated stat info 
             overall_f.write(str(i_so_far) + ',' + str(robot.getTime()) + ',' + str(total_found) + ',' + str(size) + '\n')    
@@ -539,6 +545,7 @@ def run_seconds(t,waiting=False):
             # prev_msg = msg 
             # print('requesting fitness')
             break 
+            
  
     return 
 

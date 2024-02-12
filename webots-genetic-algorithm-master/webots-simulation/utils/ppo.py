@@ -124,7 +124,13 @@ class PPO():
                 torch.save(self.actor.state_dict(), './ppo_actor.pth')
                 torch.save(self.critic.state_dict(), './ppo_critic.pth')
 
-    def learn_adjusted(self, batch_obs, batch_acts, batch_log_probs, batch_rtgs, batch_lens):
+    def learn_adjusted(self, batch_obs, batch_acts, batch_log_probs, batch_rtgs, batch_lens, batch_rewards):
+        
+        # Log the episodic returns and episodic lengths in this batch.
+        self.logger['batch_rews'] = batch_rewards
+        self.logger['batch_lens'] = batch_lens
+        self.logger['i_so_far'] += 1
+        
         # training actor and critic networks 
         t_so_far = 0  # ts simulated so far 
         i_so_far = 0  # iterations ran so far 
@@ -378,7 +384,7 @@ class PPO():
         avg_ep_rews = str(round(avg_ep_rews, 2))
         avg_actor_loss = str(round(avg_actor_loss, 5))
 
-        print(f"batch rews: {self.logger['batch_rews']}")
+        # print(f"batch rews: {self.logger['batch_rews']}")
         self.avg_rewards_over_time.append(avg_ep_rews)
         plt.plot(self.avg_rewards_over_time)
         plt.xlabel('Iterations')

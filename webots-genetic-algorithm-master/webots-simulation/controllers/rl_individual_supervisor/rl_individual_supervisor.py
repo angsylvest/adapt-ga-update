@@ -164,6 +164,7 @@ def message_listener(time_step):
 
     if receiver.getQueueLength()>0:
         message = receiver.getString()
+        # print('individual messages: ', message) 
         ## access to robot id for node acquisition    
         if 'ids' in message: 
             id_msg = message.split(" ")[1:]
@@ -182,11 +183,11 @@ def message_listener(time_step):
             pos = np.array([population[given_id].getPosition()[0], population[given_id].getPosition()[1]])
             curr_action, log_probs = model.get_action(pos)
             Agent.action = curr_action[0] 
-            print(f'initial action for agent {assigned_r_name} with action : {curr_action} for {type(curr_action)}')
+            # print(f'initial action for agent {assigned_r_name} with action : {curr_action} for {type(curr_action)}')
             # discretized_action = np.argmax(curr_action).item() # TODO: might not be correct, index of the maximum value in your continuous vector as a discrete action
             curr_action = env._action_to_direction[int(curr_action[0])]
             # Agent.action = curr_action 
-            print(f'initial action for agent {assigned_r_name} with action : {curr_action} and agent reward {Agent.reward}')
+            # print(f'initial action for agent {assigned_r_name} with action : {curr_action} and agent reward {Agent.reward}')
 
             msg = 'agent_action:'+ str(curr_action[0]) + "," + str(curr_action[1])
             
@@ -213,7 +214,7 @@ def message_listener(time_step):
             msg = 'agent_action:'+ str(curr_action[0]) + "," + str(curr_action[1])
             emitter_individual.send(msg.encode('utf-8'))
             
-            print(f'after action-request action for agent {assigned_r_name} with action : {curr_action}')
+            # print(f'after action-request action for agent {assigned_r_name} with action : {curr_action}')
 
             # if complete: batch_log_probs.append(log_prob) 
             curr_action = Agent.action if not complete else action # TODO: must do next action once done with previous
@@ -232,7 +233,7 @@ def message_listener(time_step):
 
             batch_lens.append(600) # TODO: make more dynamic 
             batch_rewards.append(ep_rews)
-            print(batch_rewards)
+            # print(batch_rewards)
             ep_rews = []
             ep_rews.append(Agent.reward)
             
@@ -259,7 +260,7 @@ def message_listener(time_step):
             # batch_log_probs = torch.tensor(batch_log_probs, dtype = torch.float)
             # batch_rtgs = model.compute_rtgs(batch_rewards)
             # batch_lens = [] # TODO: update so correct 
-            
+
             # iter = int(message.split("-")[-1])
             
             # model.learn_adjusted(batch_observations, batch_acts, batch_log_probs, batch_rtgs, batch_lens) # TODO: update 
@@ -288,7 +289,7 @@ def message_listener(time_step):
             # print(f'info updates : \n batch_observations: {batch_observations} \n batch_actions: {batch_acts} \n ep_rews: {ep_rews} \n batch_rtgs: {batch_rtgs}') 
             # print(f'batch info dims: \n batch_observations: {batch_observations.shape} \n batch_actions: {batch_acts.shape} \n batch_rtgs: {batch_rtgs.shape}')
             
-            model.learn_adjusted(batch_observations, batch_acts, batch_log_probs, batch_rtgs, batch_lens) # TODO: update 
+            model.learn_adjusted(batch_observations, batch_acts, batch_log_probs, batch_rtgs, batch_lens, batch_rewards) # TODO: update 
             print('updated model')
             
             # reset each batch 
@@ -307,11 +308,13 @@ def message_listener(time_step):
             receiver.nextPacket()
             
         else: 
+            print('skipping')
             receiver.nextPacket()
             
     if receiver_individual.getQueueLength()>0:  
         # message_individual = receiver_individual.getData().decode('utf-8')
         message_individual = receiver_individual.getString()
+        # print('indiviudal msgs --', message_individual)
 
         if 'action-complete' in message_individual: 
             Agent.reward = float(message_individual.split(":")[-1])
@@ -339,7 +342,7 @@ def message_listener(time_step):
             receiver_individual.nextPacket()
 
         else: 
-            # print('indiviudal msgs --', message_individual)
+            #
             receiver_individual.nextPacket()
 
 
@@ -370,30 +373,30 @@ def update_batch_info():
         # print(f'info updates : \n batch_observations: {batch_observations} \n batch_actions: {batch_actions} \n ep_rews: {ep_rews}') 
 
         # TODO: delete eventually .. testing network update (NOT WORKING YET)
-        if len(batch_observations) > 0 and online: 
-            batch_observations = torch.tensor(batch_observations, dtype = torch.float)
-            batch_acts = torch.tensor(batch_actions, dtype = torch.float)
-            batch_log_probs = torch.tensor(batch_log_probs, dtype = torch.float)
-            print('intial batch_rewards - ', batch_rewards)
-            batch_rewards.append(ep_rews)
-            print('final batch_rewards - ', batch_rewards)
-            batch_rtgs = model.compute_rtgs(batch_rewards) # TODO: should be batch_rewards instead of ep_rews
-            batch_lens = [600] # TODO: update so correct 
-            print('converted to torch')
-            print(f'info updates : \n batch_observations: {batch_observations.shape} \n batch_actions: {batch_acts.shape} \n ep_rews: {ep_rews} \n batch_rtgs: {batch_rtgs}') 
+        # if len(batch_observations) > 0 and online: 
+            # batch_observations = torch.tensor(batch_observations, dtype = torch.float)
+            # batch_acts = torch.tensor(batch_actions, dtype = torch.float)
+            # batch_log_probs = torch.tensor(batch_log_probs, dtype = torch.float)
+            # print('intial batch_rewards - ', batch_rewards)
+            # batch_rewards.append(ep_rews)
+            # print('final batch_rewards - ', batch_rewards)
+            # batch_rtgs = model.compute_rtgs(batch_rewards) # TODO: should be batch_rewards instead of ep_rews
+            # batch_lens = [600] # TODO: update so correct 
+            # print('converted to torch')
+            # print(f'info updates : \n batch_observations: {batch_observations.shape} \n batch_actions: {batch_acts.shape} \n ep_rews: {ep_rews} \n batch_rtgs: {batch_rtgs}') 
             
             
-            model.learn_adjusted(batch_observations, batch_acts, batch_log_probs, batch_rtgs, batch_lens, 0) # TODO: update 
-            print('updated model')
+            # model.learn_adjusted(batch_observations, batch_acts, batch_log_probs, batch_rtgs, batch_lens, 0) # TODO: update 
+            # print('updated model')
             
             # reset each batch 
-            batch_observations = []
-            batch_actions = []
-            ep_rews = []
-            batch_log_probs = [] 
-            batch_lens = [] 
-            curr_index = 0
-            batch_rewards = []
+            # batch_observations = []
+            # batch_actions = []
+            # ep_rews = []
+            # batch_log_probs = [] 
+            # batch_lens = [] 
+            # curr_index = 0
+            # batch_rewards = []
             
             
         
