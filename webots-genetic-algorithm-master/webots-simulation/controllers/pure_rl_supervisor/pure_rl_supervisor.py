@@ -60,7 +60,7 @@ communication = True
 high_dense = True
 
 # # collected counts csv generation 
-overall_f = open(f'../../graph-generation/collection-data/overall-df-{sim_type}-{curr_size}.csv', 'w')
+overall_f = open(f'../../graph-generation/collection-data/overall-df-{sim_type}-{curr_size}-comm_{communication}-dense_{high_dense}.csv', 'w')
 overall_columns = 'trial' + ',time' + ',objects retrieved' + ',size' 
 overall_f.write(str(overall_columns) + '\n')
 
@@ -114,6 +114,7 @@ curr_env = env_mod.Environment(env_type=env_type, seed = seed_val)
 # individual PPO model for each agent 
 hyperparamters = {}
 env = ForagingEnv()
+count = 1 
 # model = PPO(FeedForwardNN, env, **hyperparamters)
 
 
@@ -328,6 +329,7 @@ def message_listener(time_step):
     global simulation_time
     global prev_msg 
     global updating
+    global count 
     
     if receiver.getQueueLength()>0 and (robot.getTime() - start < simulation_time):
         # message = receiver.getData().decode('utf-8')
@@ -366,7 +368,11 @@ def message_listener(time_step):
                             prev_msg = msg
 
         if 'update-complete' in message: 
-            updating = False 
+            if count >= curr_size: 
+                updating = False 
+            else: 
+                count += 1
+                
             receiver.nextPacket()
             
         else: 
@@ -454,6 +460,7 @@ def run_optimization():
     global ind_sup
     global updating 
     global overall_f
+    global count 
     
     for size in robot_population_sizes:
         curr_size = size  
@@ -494,13 +501,15 @@ def run_optimization():
             msg = 'updating-network' 
 
             # update csv with updated stat info 
+            overall_f = open(f'../../graph-generation/collection-data/overall-df-{sim_type}-{curr_size}-comm_{communication}-dense_{high_dense}.csv', 'a')
             overall_f.write(str(i_so_far) + ',' + str(robot.getTime()) + ',' + str(total_found) + ',' + str(size) + '\n')    
             overall_f.close()
-            overall_f = open(f'../../graph-generation/collection-data/overall-df-{sim_type}-{curr_size}-comm_{communication}-dense_{high_dense}.csv', 'a')
+            
             print('items collected', total_found)
 
             emitter_individual.send(msg.encode('utf-8'))
 
+            count = 1 
             while updating: 
                 run_seconds(1) 
                 message_listener(0) # TODO: remove var if not useful
