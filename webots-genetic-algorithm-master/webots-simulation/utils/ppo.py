@@ -375,7 +375,6 @@ class PPO():
 
         t_so_far = self.logger['t_so_far']
         i_so_far = self.logger['i_so_far']
-        print(f'batch rews from logger: {self.logger["batch_rews"]}')
 
         if not online: # not updating with only one obs at a time 
             avg_ep_lens = np.mean(self.logger["batch_lens"])

@@ -48,9 +48,15 @@ sim_type = globals.sim_type
 communication = globals.communication 
 using_high_dens = globals.using_high_dense 
 hyperparamters = {}
-agent_info = {"path": f"../../graph-generation/collection-data/env_{sim_type}_batch_{batch}_online_{online}_agent_{assigned_r_name}"}
+agent_info = {"path": f"../../graph-generation/collection-data/env_{sim_type}_batch_{batch}_online_{online}_agent_{assigned_r_name}_"}
 env = ForagingEnv()
 model = PPO(FeedForwardNN, env, agent_info, **hyperparamters)
+
+# # collected counts csv generation 
+agent_df = open(f'../../graph-generation/collection-data/overall-df-{sim_type}-comm_{communication}-agent-{assigned_r_name}.csv', 'w')
+overall_columns = 'episode,' + 'avg_reward' + ',objects retrieved' 
+agent_df.write(str(overall_columns) + '\n')
+agent_df.close()
     
 #### allow personal supervisor to send important encounter info back to supervisor ## 
 emitter = robot.getDevice("emitter")
@@ -100,6 +106,9 @@ prev_pos = ()
 agent_pos = ()
 prev_population_pos = []
 
+cum_reward = 0 
+episode_length = 0 
+curr_episode = 0 
 
 
 def generate_vector(agent_pos, prev_pos, prev_population_pos):
@@ -160,6 +169,10 @@ def message_listener(time_step):
     global prev_pos
     global agent_pos
     global prev_population_pos
+    global curr_episode
+    global cum_reward 
+    global episode_length 
+    global curr_episode 
 
 
     if receiver.getQueueLength()>0:
@@ -228,7 +241,16 @@ def message_listener(time_step):
             Agent.reset() 
             msg = 'episode-agent-complete'
             emitter_individual.send(msg.encode('utf-8'))
-            
+            curr_episode += 1 
+
+            agent_df = open(f'../../graph-generation/collection-data/overall-df-{sim_type}-comm_{communication}-agent-{assigned_r_name}.csv', 'a')
+            col_update = f"{curr_episode}, {cum_reward/episode_length}, NA"
+            agent_df.write(str(col_update) + '\n')
+            agent_df.close()
+
+            cum_reward = 0 
+            episode_length = 0 
+
             print('episode complete')
 
             batch_lens.append(600) # TODO: make more dynamic 
@@ -241,7 +263,7 @@ def message_listener(time_step):
             pos = np.array([population[given_id].getPosition()[0], population[given_id].getPosition()[1]])
             curr_action, log_probs = model.get_action(pos)
             Agent.action = curr_action[0] 
-            print(f'initial action for agent {assigned_r_name} with action : {curr_action} for {type(curr_action)}')
+            # print(f'initial action for agent {assigned_r_name} with action : {curr_action} for {type(curr_action)}')
             # discretized_action = np.argmax(curr_action).item() # TODO: might not be correct, index of the maximum value in your continuous vector as a discrete action
             curr_action = env._action_to_direction[int(curr_action[0])]
 
@@ -349,6 +371,8 @@ def update_batch_info():
     global batch_rewards
 
     global curr_index 
+    global episode_length
+    global cum_reward
    
 
     if robot.getTime() - prev_time > update_sec and curr_index <= num_updates_per_episode: # update every second 
@@ -359,6 +383,9 @@ def update_batch_info():
         batch_actions.append(Agent.action)
         ep_rews.append(Agent.reward)
         batch_log_probs.append(Agent.log_prob)
+
+        episode_length += 1
+        cum_reward += Agent.reward
         # print(f'info updates : \n batch_observations: {batch_observations} \n batch_actions: {batch_actions} \n ep_rews: {ep_rews}') 
 
         # TODO: delete eventually .. testing network update (NOT WORKING YET)
