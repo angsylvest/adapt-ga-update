@@ -48,7 +48,7 @@ sim_type = globals.sim_type
 communication = globals.communication 
 using_high_dens = globals.using_high_dense 
 hyperparamters = {}
-agent_info = {"path": f"../../graph-generation/collection-data/env_{sim_type}_batch_{batch}_online_{online}_agent_{assigned_r_name}_"}
+agent_info = {"path": f"../../graph-generation/collection-data/env_{sim_type}_batch_{batch}_online_{online}_agent_{assigned_r_name}_", "name": assigned_r_name}
 env = ForagingEnv()
 model = PPO(FeedForwardNN, env, agent_info, **hyperparamters)
 

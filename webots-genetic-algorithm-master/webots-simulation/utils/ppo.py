@@ -121,8 +121,12 @@ class PPO():
 
             # save model if it's time 
             if i_so_far % self.save_freq == 0:
-                torch.save(self.actor.state_dict(), './ppo_actor.pth')
-                torch.save(self.critic.state_dict(), './ppo_critic.pth')
+                print(self.agent_info)
+                id = self.agent_info["name"]
+                # spec_act = f"./ppo_actor_{id}.pth"
+                # spec_crit = f"./ppo_critic_{id}.pth"
+                torch.save(self.actor.state_dict(), "../checkpoints/actor.pth")
+                torch.save(self.critic.state_dict(), "../checkpoints/critic.pth")
 
     def learn_adjusted(self, batch_obs, batch_acts, batch_log_probs, batch_rtgs, batch_lens, batch_rewards):
         
@@ -187,8 +191,8 @@ class PPO():
 
         # save model if it's time 
         if self.logger['i_so_far'] % self.save_freq == 0:
-            torch.save(self.actor.state_dict(), './ppo_actor.pth')
-            torch.save(self.critic.state_dict(), './ppo_critic.pth')
+            torch.save(self.actor.state_dict(), f'../../checkpoints/ppo_actor_{self.agent_info["name"]}.pth')
+            torch.save(self.critic.state_dict(), f'../../checkpoints/ppo_critic_{self.agent_info["name"]}.pth')
 
     def roll_out(self):
         # collect info during iteration 
@@ -329,7 +333,7 @@ class PPO():
         # initialize default + custom values 
 
         self.timesteps_per_batch = 4800
-        self.max_timesteps_per_episode = 600
+        self.max_timesteps_per_episode = 600 # TODO: this is not the actual param (atleast not yet)
         self.n_updates_per_iteration = 5
         self.lr = 0.005 
         self.gamma = 0.95
