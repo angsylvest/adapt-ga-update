@@ -373,30 +373,30 @@ def update_batch_info():
         # print(f'info updates : \n batch_observations: {batch_observations} \n batch_actions: {batch_actions} \n ep_rews: {ep_rews}') 
 
         # TODO: delete eventually .. testing network update (NOT WORKING YET)
-        # if len(batch_observations) > 0 and online: 
-            # batch_observations = torch.tensor(batch_observations, dtype = torch.float)
-            # batch_acts = torch.tensor(batch_actions, dtype = torch.float)
-            # batch_log_probs = torch.tensor(batch_log_probs, dtype = torch.float)
-            # print('intial batch_rewards - ', batch_rewards)
-            # batch_rewards.append(ep_rews)
-            # print('final batch_rewards - ', batch_rewards)
-            # batch_rtgs = model.compute_rtgs(batch_rewards) # TODO: should be batch_rewards instead of ep_rews
-            # batch_lens = [600] # TODO: update so correct 
-            # print('converted to torch')
-            # print(f'info updates : \n batch_observations: {batch_observations.shape} \n batch_actions: {batch_acts.shape} \n ep_rews: {ep_rews} \n batch_rtgs: {batch_rtgs}') 
+        if len(batch_observations) > 0 and online: 
+            batch_observations = torch.tensor(batch_observations, dtype = torch.float)
+            batch_acts = torch.tensor(batch_actions, dtype = torch.float)
+            batch_log_probs = torch.tensor(batch_log_probs, dtype = torch.float)
+            print('intial batch_rewards - ', batch_rewards)
+            batch_rewards.append(ep_rews)
+            print('final batch_rewards - ', batch_rewards)
+            batch_rtgs = model.compute_rtgs(batch_rewards) # TODO: should be batch_rewards instead of ep_rews
+            batch_lens = [600] # TODO: update so correct 
+            print('converted to torch')
+            print(f'info updates : \n batch_observations: {batch_observations.shape} \n batch_actions: {batch_acts.shape} \n ep_rews: {ep_rews} \n batch_rtgs: {batch_rtgs}') 
             
             
-            # model.learn_adjusted(batch_observations, batch_acts, batch_log_probs, batch_rtgs, batch_lens, 0) # TODO: update 
-            # print('updated model')
+            model.learn_adjusted(batch_observations, batch_acts, batch_log_probs, batch_rtgs, batch_lens, 0) # TODO: update 
+            print('updated model')
             
             # reset each batch 
-            # batch_observations = []
-            # batch_actions = []
-            # ep_rews = []
-            # batch_log_probs = [] 
-            # batch_lens = [] 
-            # curr_index = 0
-            # batch_rewards = []
+            batch_observations = []
+            batch_actions = []
+            ep_rews = []
+            batch_log_probs = [] 
+            batch_lens = [] 
+            curr_index = 0
+            batch_rewards = []
             
             
         

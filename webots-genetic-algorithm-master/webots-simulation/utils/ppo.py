@@ -133,7 +133,7 @@ class PPO():
         
         # training actor and critic networks 
         t_so_far = 0  # ts simulated so far 
-        i_so_far = 0  # iterations ran so far 
+        # i_so_far = 0  # iterations ran so far 
         
         # while t_so_far < total_timesteps: 
             # collect batch sims here 
@@ -143,11 +143,11 @@ class PPO():
         t_so_far += np.sum(batch_lens)
 
         # incre # of iterations 
-        i_so_far += 1
+        # i_so_far += 1
 
         # log timesteps + iterations 
         self.logger['t_so_far'] = t_so_far
-        self.logger['i_so_far'] = i_so_far
+        # self.logger['i_so_far'] = i_so_far
 
         # calc advantage at k-th iteration 
         # print(f'in evaluate() batch_obs: {batch_obs} and batch_acts: {batch_acts}')
@@ -186,7 +186,7 @@ class PPO():
         self._log_summary()
 
         # save model if it's time 
-        if i_so_far % self.save_freq == 0:
+        if self.logger['i_so_far'] % self.save_freq == 0:
             torch.save(self.actor.state_dict(), './ppo_actor.pth')
             torch.save(self.critic.state_dict(), './ppo_critic.pth')
 
@@ -375,36 +375,50 @@ class PPO():
 
         t_so_far = self.logger['t_so_far']
         i_so_far = self.logger['i_so_far']
-        avg_ep_lens = np.mean(self.logger['batch_lens'])
-        avg_ep_rews = np.mean([np.sum(ep_rews) for ep_rews in self.logger['batch_rews']])
-        avg_actor_loss = np.mean([losses.float().mean() for losses in self.logger['actor_losses']])
+        print(f'batch rews from logger: {self.logger["batch_rews"]}')
 
-        # Round decimal places for more aesthetic logging messages
-        avg_ep_lens = str(round(avg_ep_lens, 2))
-        avg_ep_rews = str(round(avg_ep_rews, 2))
-        avg_actor_loss = str(round(avg_actor_loss, 5))
+        if not online: # not updating with only one obs at a time 
+            avg_ep_lens = np.mean(self.logger["batch_lens"])
+            avg_ep_rews = np.mean([np.sum(ep_rews) for ep_rews in self.logger['batch_rews']])
+            avg_actor_loss = np.mean([losses.float().mean() for losses in self.logger['actor_losses']])
 
-        # print(f"batch rews: {self.logger['batch_rews']}")
-        self.avg_rewards_over_time.append(avg_ep_rews)
-        plt.plot(self.avg_rewards_over_time)
-        plt.xlabel('Iterations')
-        plt.ylabel('Average Reward')
-        plt.title('Average Reward Over Time')
-        plt.grid(True)
-        plt.savefig(self.graph_path + 'avg_reward_over_time.png')  # Save the plot
-        # plt.show()
+            # Round decimal places for more aesthetic logging messages
+            avg_ep_lens = str(round(avg_ep_lens, 2))
+            avg_ep_rews = str(round(avg_ep_rews, 2))
+            avg_actor_loss = str(round(avg_actor_loss, 5))
+
+            # print(f"batch rews: {self.logger['batch_rews']}")
+            self.avg_rewards_over_time.append(avg_ep_rews)
+            plt.plot(self.avg_rewards_over_time)
+            plt.xlabel('Iterations')
+            plt.ylabel('Average Reward')
+            plt.title('Average Reward Over Time')
+            plt.grid(True)
+            plt.savefig(self.graph_path + 'avg_reward_over_time.png')  # Save the plot
+            # plt.show()
 
 
-        # Print logging statements
-        print(flush=True)
-        print(f"-------------------- Iteration #{i_so_far} --------------------", flush=True)
-        print(f"Average Episodic Length: {avg_ep_lens}", flush=True)
-        print(f"Average Episodic Return: {avg_ep_rews}", flush=True)
-        print(f"Average Loss: {avg_actor_loss}", flush=True)
-        print(f"Timesteps So Far: {t_so_far}", flush=True)
-        print(f"Iteration took: {delta_t} secs", flush=True)
-        print(f"------------------------------------------------------", flush=True)
-        print(flush=True)
+            # Print logging statements
+            print(flush=True)
+            print(f"-------------------- Iteration #{i_so_far} --------------------", flush=True)
+            print(f"Average Episodic Length: {avg_ep_lens}", flush=True)
+            print(f"Average Episodic Return: {avg_ep_rews}", flush=True)
+            print(f"Average Loss: {avg_actor_loss}", flush=True)
+            print(f"Timesteps So Far: {t_so_far}", flush=True)
+            print(f"Iteration took: {delta_t} secs", flush=True)
+            print(f"------------------------------------------------------", flush=True)
+            print(flush=True)
+
+        else: # diff output for online 
+            print(flush=True)
+            # print(f"-------------------- Iteration #{i_so_far} --------------------", flush=True)
+            # print(f"Average Episodic Length: {avg_ep_lens}", flush=True)
+            # print(f"Average Episodic Return: {avg_ep_rews}", flush=True)
+            # print(f"Average Loss: {avg_actor_loss}", flush=True)
+            # print(f"Timesteps So Far: {t_so_far}", flush=True)
+            # print(f"Iteration took: {delta_t} secs", flush=True)
+            # print(f"------------------------------------------------------", flush=True)
+            # print(flush=True)
 
         # Reset batch-specific logging data
         self.logger['batch_lens'] = []

@@ -63,15 +63,13 @@ high_dense = True
 overall_f = open(f'../../graph-generation/collection-data/overall-df-{sim_type}-{curr_size}-comm_{communication}-dense_{high_dense}.csv', 'w')
 overall_columns = 'trial' + ',time' + ',objects retrieved' + ',size' 
 overall_f.write(str(overall_columns) + '\n')
+overall_f.close()
 
-# overall_f.close()
 # overall_f = open(f'../../graph-generation/collection-data/overall-df-{sim_type}-{curr_size}-comm_{communication}-dense_{high_dense}.csv', 'a')
-
 # # for individual robot, statistics about strategy taken over time & individual collision info 
 # strategy_f = open(f"../../graph-generation/collision-data/ga-info-{sim_type}-{curr_size}-comm_{communication}-dense_{high_dense}.csv", 'w')
 # strategy_f.write('agent id'+ ',time step' + ',straight' + ',alternating-left' + ',alternating-right' + ',true random' + ',time since last block' + ',num encounters' + ',size' + ',fitness'+ ',size'+ ',type' + ',trial' + ',collected' + ',genotype' + ',num better' + ',pos x' + ',pos y' + '\n')
 # strategy_f.close()
-
 
 # # statistics collected 
 population = []
@@ -411,22 +409,10 @@ def rollout():
     t = 0 
 
     while t < timesteps_per_batch: 
-        # ep_rews = []
-        # obs = [i.getField('translation') for i in population]
-        # done = False
 
         run_seconds(max_timesteps_per_episode) # gather info from sim for each agent 
         print('completed run of episode')
         t += max_timesteps_per_episode
-
-        # for ep_t in range(max_timesteps_per_episode): 
-        #     # would want to run sim for this time 
-        #     t += 1 
-            # batch_obs.append[obs] # list of agent obs (positions)
-
-            # # request to calc action (for each agent)
-            # msg = 'action-request'
-            # emitter.send(msg.encode('utf-8'))
 
         msg = 'episode-complete' # will reset agent 
         emitter_individual.send(msg.encode('utf-8'))
