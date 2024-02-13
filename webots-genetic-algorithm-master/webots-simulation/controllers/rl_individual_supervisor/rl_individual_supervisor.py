@@ -253,44 +253,33 @@ def message_listener(time_step):
             receiver.nextPacket()
 
         elif 'updating-network' in message: 
+            # this instance of update occurs at the end of the episode 
+
             # TODO: make network update pause sim or stop further collection of statistics 
             print('updating network')
-            # batch_observations = torch.tensor(batch_observations, dtype = torch.float)
-            # batch_actions = torch.tensor(batch_acts, dtype = torch.float)
-            # batch_log_probs = torch.tensor(batch_log_probs, dtype = torch.float)
-            # batch_rtgs = model.compute_rtgs(batch_rewards)
-            # batch_lens = [] # TODO: update so correct 
-
-            # iter = int(message.split("-")[-1])
             
-            # model.learn_adjusted(batch_observations, batch_acts, batch_log_probs, batch_rtgs, batch_lens) # TODO: update 
-            # msg = 'update-complete'
-
-            # if empty, will tmp add something
-            # batch_observations = [()]
-            # batch_actions = [()]
-            # print(ep_rews)
-            # curr_index = 0
             
             # TODO: need to make work across episodes updated code with corrections 
             # print(f'init batch sizes \n batch_observations: {len(batch_observations)} \n batch_actions: {len(batch_actions)}')
             # print('batch actions --', batch_actions)
-            batch_observations = torch.tensor(batch_observations, dtype = torch.float)
-            batch_acts = torch.tensor(batch_actions, dtype = torch.float)
-            batch_log_probs = torch.tensor(batch_log_probs, dtype = torch.float)
-            # print('intial batch_rewards - ', batch_rewards)
 
-            # if not globals.use_batch: 
-            #     batch_rewards.append(ep_rews) # TODO: do i need this? 
-            # print('final batch_rewards - ', len(batch_rewards))
-            batch_rtgs = model.compute_rtgs(batch_rewards) # TODO: should be batch_rewards instead of ep_rews
-            batch_lens = [600] # TODO: update so correct 
-            # print('converted to torch')
-            # print(f'info updates : \n batch_observations: {batch_observations} \n batch_actions: {batch_acts} \n ep_rews: {ep_rews} \n batch_rtgs: {batch_rtgs}') 
-            # print(f'batch info dims: \n batch_observations: {batch_observations.shape} \n batch_actions: {batch_acts.shape} \n batch_rtgs: {batch_rtgs.shape}')
-            
-            model.learn_adjusted(batch_observations, batch_acts, batch_log_probs, batch_rtgs, batch_lens, batch_rewards) # TODO: update 
-            print('updated model')
+            if not online: 
+                batch_observations = torch.tensor(batch_observations, dtype = torch.float)
+                batch_acts = torch.tensor(batch_actions, dtype = torch.float)
+                batch_log_probs = torch.tensor(batch_log_probs, dtype = torch.float)
+                # print('intial batch_rewards - ', batch_rewards)
+
+                # if not globals.use_batch: 
+                #     batch_rewards.append(ep_rews) # TODO: do i need this? 
+                # print('final batch_rewards - ', len(batch_rewards))
+                batch_rtgs = model.compute_rtgs(batch_rewards) # TODO: should be batch_rewards instead of ep_rews
+                batch_lens = [600] # TODO: update so correct 
+                # print('converted to torch')
+                # print(f'info updates : \n batch_observations: {batch_observations} \n batch_actions: {batch_acts} \n ep_rews: {ep_rews} \n batch_rtgs: {batch_rtgs}') 
+                # print(f'batch info dims: \n batch_observations: {batch_observations.shape} \n batch_actions: {batch_acts.shape} \n batch_rtgs: {batch_rtgs.shape}')
+                
+                model.learn_adjusted(batch_observations, batch_acts, batch_log_probs, batch_rtgs, batch_lens, batch_rewards) # TODO: update 
+                print('updated model for episode based update')
             
             # reset each batch 
             batch_observations = []

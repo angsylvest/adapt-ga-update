@@ -411,7 +411,7 @@ class PPO():
 
         else: # diff output for online 
             print(flush=True)
-            # print(f"-------------------- Iteration #{i_so_far} --------------------", flush=True)
+            print(f"-------------------- Iteration #{i_so_far} --------------------", flush=True)
             # print(f"Average Episodic Length: {avg_ep_lens}", flush=True)
             # print(f"Average Episodic Return: {avg_ep_rews}", flush=True)
             # print(f"Average Loss: {avg_actor_loss}", flush=True)
