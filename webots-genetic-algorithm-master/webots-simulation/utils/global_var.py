@@ -2,7 +2,7 @@
 
 population_sizes = []
 use_batch = False  # BATCH NOT IMPLEMENTED YET
-online = False
+online = True
 sim_type = "random"
 communication = False 
 using_high_dense = True 
