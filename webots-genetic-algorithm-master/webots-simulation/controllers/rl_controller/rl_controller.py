@@ -162,6 +162,9 @@ reward = 0
 goal_posx = ""
 goal_posy = ""
 
+prev_time = robot.getTime()
+time_allocated = 6 # time to move and rotate (worst case) 
+
 # calculates angle normal to current orientation 
 def calc_normal(curr_angle): 
 
@@ -416,6 +419,7 @@ cleaning = False
 prev_gen_check = robot.getTime() 
 prev_act = ""
 
+
 while robot.step(timestep) != -1 and sim_complete != True:
     
     if not cleaning: 
@@ -448,7 +452,12 @@ while robot.step(timestep) != -1 and sim_complete != True:
         if not holding_something and not reversing and not moving_forward and curr_action != []: 
             # goal_posx, goal_posy = curr_action[0] + cd_x, curr_action[0] + cd_y # TODO: not correct, but logic is there 
             if math.dist([cd_x, cd_y], [goal_posx,goal_posy]) > 0.05:  
-                chosen_direction = round(math.atan2(goal_posy-cd_y,goal_posx-cd_x),2) 
+                if robot.getTime() - prev_time > time_allocated: # if unable to complete, not encouraged
+                    rew = reward()
+                    msg = f'action-complete:{rew}'
+                    emitter_individual.send(msg.encode('utf-8'))
+                else: 
+                    chosen_direction = round(math.atan2(goal_posy-cd_y,goal_posx-cd_x),2) 
             else: # request new action 
                 # print(f'successfully reached next pos: {goal_posx}, {goal_posy} with dis {math.dist([cd_x, cd_y], [goal_posx,goal_posy])} with curr time {robot.getTime()}')
                 rew = reward()
