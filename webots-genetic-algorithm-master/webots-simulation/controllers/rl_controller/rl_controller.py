@@ -164,6 +164,11 @@ goal_posy = ""
 
 prev_time = robot.getTime()
 time_allocated = 6 # time to move and rotate (worst case) 
+iteration = 0 
+
+
+def get_obs():
+    return "1"
 
 # calculates angle normal to current orientation 
 def calc_normal(curr_angle): 
@@ -308,6 +313,7 @@ def interpret(timestep):
     
     global forward_per_sec
     global prev_act
+    global iteration
     
     if receiver.getQueueLength()>0:
         message = receiver.getString()
@@ -320,6 +326,14 @@ def interpret(timestep):
             found_something = True 
             n_observations_block += 1 
             
+            receiver.nextPacket()
+
+        elif 'reset' in message: 
+            rew = reward()
+            msg = f'action-complete:{rew}:{get_obs()}'
+            iteration += 1 
+            emitter_individual.send(msg.encode('utf-8'))
+
             receiver.nextPacket()
             
         elif 'size' in message:
@@ -454,14 +468,15 @@ while robot.step(timestep) != -1 and sim_complete != True:
             if math.dist([cd_x, cd_y], [goal_posx,goal_posy]) > 0.05:  
                 if robot.getTime() - prev_time > time_allocated: # if unable to complete, not encouraged
                     rew = reward()
-                    msg = f'action-complete:{rew}'
+                    msg = f'action-complete:{rew}:{get_obs()}'
                     emitter_individual.send(msg.encode('utf-8'))
+                    prev_time = robot.getTime()
                 else: 
                     chosen_direction = round(math.atan2(goal_posy-cd_y,goal_posx-cd_x),2) 
             else: # request new action 
                 # print(f'successfully reached next pos: {goal_posx}, {goal_posy} with dis {math.dist([cd_x, cd_y], [goal_posx,goal_posy])} with curr time {robot.getTime()}')
                 rew = reward()
-                msg = f'action-complete:{rew}'
+                msg = f'action-complete:{rew}:{get_obs()}'
                 emitter_individual.send(msg.encode('utf-8'))
     
         roll, pitch, yaw = inertia.getRollPitchYaw()

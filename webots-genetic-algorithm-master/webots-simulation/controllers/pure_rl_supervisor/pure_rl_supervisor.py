@@ -410,6 +410,10 @@ def rollout():
 
     while t < timesteps_per_batch: 
 
+        # emitter.send(str("action-request").encode('utf-8'))
+        msg = "reset"
+        emitter.send(str(msg).encode('utf-8'))
+
         run_seconds(max_timesteps_per_episode) # gather info from sim for each agent 
         print('completed run of episode')
         t += max_timesteps_per_episode

@@ -194,18 +194,17 @@ def message_listener(time_step):
             Agent.set_location((population[given_id].getPosition()[0], population[given_id].getPosition()[1]))
             
             # set action for corresponding robot 
-            pos = np.array([population[given_id].getPosition()[0], population[given_id].getPosition()[1]])
-            curr_action, log_probs = model.get_action(pos)
-            Agent.action = curr_action[0] 
-            # print(f'initial action for agent {assigned_r_name} with action : {curr_action} for {type(curr_action)}')
-            # discretized_action = np.argmax(curr_action).item() # TODO: might not be correct, index of the maximum value in your continuous vector as a discrete action
-            curr_action = env._action_to_direction[int(curr_action[0])]
-            # Agent.action = curr_action 
-            # print(f'initial action for agent {assigned_r_name} with action : {curr_action} and agent reward {Agent.reward}')
+            # pos = np.array([population[given_id].getPosition()[0], population[given_id].getPosition()[1]])
+            # curr_action, log_probs = model.get_action(pos)
+            # Agent.action = curr_action[0] 
+            # # print(f'initial action for agent {assigned_r_name} with action : {curr_action} for {type(curr_action)}')
+            # # discretized_action = np.argmax(curr_action).item() # TODO: might not be correct, index of the maximum value in your continuous vector as a discrete action
+            # curr_action = env._action_to_direction[int(curr_action[0])]
+            # # Agent.action = curr_action 
+            # # print(f'initial action for agent {assigned_r_name} with action : {curr_action} and agent reward {Agent.reward}')
 
-            msg = 'agent_action:'+ str(curr_action[0]) + "," + str(curr_action[1])
-            
-            emitter_individual.send(msg.encode('utf-8'))
+            # msg = 'agent_action:'+ str(curr_action[0]) + "," + str(curr_action[1])
+            # emitter_individual.send(msg.encode('utf-8'))
                 
             receiver.nextPacket() 
             
@@ -215,6 +214,9 @@ def message_listener(time_step):
             receiver.nextPacket()
 
         elif 'action-request' in message: 
+            Agent.reward = float(message_individual.split(":")[-2])
+            Agent.observation = float(message_individual.split(":")[-1]) # TODO: not correct yet
+            
             pos = np.array([population[given_id].getPosition()[0], population[given_id].getPosition()[1]])
             Agent.action, log_prob = model.get_action(pos)
             curr_action = env._action_to_direction(Agent.action)
@@ -329,7 +331,8 @@ def message_listener(time_step):
         # print('indiviudal msgs --', message_individual)
 
         if 'action-complete' in message_individual: 
-            Agent.reward = float(message_individual.split(":")[-1])
+            Agent.reward = float(message_individual.split(":")[-2])
+            Agent.observation = float(message_individual.split(":")[-1]) # TODO: not correct yet
             obs, rew, done = Agent.observation, Agent.reward, Agent.done
 
             if len(batch_observations) > 0 and online: 
