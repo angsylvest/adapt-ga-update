@@ -49,6 +49,9 @@ class ForagingEnv(gym.Env):
                     {
                         "agent": spaces.Box(0, size - 1, shape=(2,), dtype=int),
                         "target": spaces.Box(0, size - 1, shape=(2,), dtype=int),
+                        "ultrasonic": spaces.Box(0, size - 1, shape=(1,), dtype=int),
+                        "ultrasonic_left": spaces.Box(0, size - 1, shape=(1,), dtype=int),
+                        "ultrasonic_right": spaces.Box(0, size - 1, shape=(1,), dtype=int),
                     }
                 )
             

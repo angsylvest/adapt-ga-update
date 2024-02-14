@@ -6,7 +6,7 @@ minimizedPerspectives: 000000ff00000000fd0000000200000001000003ba00000178fc02000
 maximizedDockId: -1
 centralWidgetVisible: 1
 orthographicViewHeight: 1
-textFiles: 7 "controllers/rl_individual_supervisor/rl_individual_supervisor.py" "controllers/rl_controller/rl_controller.py" "controllers/pure_rl_supervisor/pure_rl_supervisor.py" "utils/ppo.py" "utils/rl_agent.py" "utils/nn.py" "utils/rl_wrapper.py" "protos/khepera_pure_rl.proto"
+textFiles: 0 "controllers/rl_individual_supervisor/rl_individual_supervisor.py" "controllers/rl_controller/rl_controller.py" "controllers/pure_rl_supervisor/pure_rl_supervisor.py" "utils/ppo.py" "utils/rl_agent.py" "utils/nn.py" "utils/rl_wrapper.py" "protos/khepera_pure_rl.proto"
 consoles: Console:All:All
 consoles: Console:All:All
 renderingDevicePerspectives: k0:camera;1;1;0;0
