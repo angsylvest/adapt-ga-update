@@ -542,11 +542,13 @@ while robot.step(timestep) != -1 and sim_complete != True:
             
         if min(dist_vals) <= 330 and not reversing: # wall detection 
             fitness += 1 
-            remove_orientations.append(chosen_direction)
-            reversing = True 
-            move_backwards()
-            if time_into_generation != 0: 
-                agent_observation['num_collisions'] = (agent_observation['num_collisions'] + 1) / time_into_generation
+
+            if not rl_collision: # explicitly do encoded behavior to avoid obstacles
+                remove_orientations.append(chosen_direction)
+                reversing = True 
+                move_backwards()
+                if time_into_generation != 0: 
+                    agent_observation['num_collisions'] = (agent_observation['num_collisions'] + 1) / time_into_generation
                         
             # does each behavior after 1 sec    
         if robot.getTime() - start_count >= 1: 
