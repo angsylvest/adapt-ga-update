@@ -35,7 +35,7 @@ class PPO():
         # extract env info 
         self.env = env 
         # self.obs_dim = env.observation_space[0].shape[0]
-        self.obs_dim = env.observation_space[0]["agent"].shape[0] # + env.observation_space[0]["target"].shape[0]
+        self.obs_dim = env.observation_space[0]["agent"].shape[0] + env.observation_space[0]["ultrasonic"].shape[0] + env.observation_space[0]["ultrasonic_left"].shape[0] + env.observation_space[0]["ultrasonic_right"].shape[0] 
         
         # self.act_dim = env.action_space[0].shape[0]
         self.act_dim = env.action_space[0].n # is 4 now

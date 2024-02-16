@@ -13,6 +13,8 @@ from math import sin, cos, pi
 import math 
 import random 
 
+import numpy as np 
+
 # ensure that we can access utils package to streamline tasks 
 import sys 
 sys.path.append('../../')
@@ -88,6 +90,7 @@ ratio = 0.12
 base = 0.180 
 norm = (forward_speed - 5) # 5 is the slowest you can go  
 forward_per_sec = ratio*norm + base 
+dist_vals = [1000, 1000, 1000] # is what values are initially 
             
 # detect_thres = 1000
 time_switch = 200
@@ -100,6 +103,7 @@ repopulate = False
 sim_type = globals.sim_type
 communication = globals.communication 
 using_high_dens = globals.using_high_dense 
+rl_collision = globals.rl_collision
 
 terrains = ['normal', 'road']
 current_terrain = terrains[0] # either normal or road 
@@ -167,8 +171,17 @@ time_allocated = 6 # time to move and rotate (worst case)
 iteration = 0 
 
 
-def get_obs():
-    return "1"
+def get_obs(pos_list):
+    # should be a concatenated version of input 
+    global dist_vals
+    
+    obs = {"agent": pos_list, 
+           "ultrasonic": [dist_vals[0]], 
+           "ultrasonic_left": [dist_vals[1]],
+           "ultrasonic_right": [dist_vals[2]]}
+    
+    
+    return obs
 
 # calculates angle normal to current orientation 
 def calc_normal(curr_angle): 
@@ -330,7 +343,8 @@ def interpret(timestep):
 
         elif 'reset' in message: 
             rew = reward()
-            msg = f'action-complete:{rew}:{get_obs()}'
+            cd_x, cd_y = float(gps.getValues()[0]), float(gps.getValues()[1])
+            msg = f'action-complete:{rew}:{get_obs([cd_x, cd_y])}'
             iteration += 1 
             emitter_individual.send(msg.encode('utf-8'))
 
@@ -373,7 +387,7 @@ def interpret(timestep):
         elif 'agent_action' in message: 
             curr_action = [int(message.split(":")[-1].split(",")[0]), int(message.split(":")[-1].split(",")[1])]
             curr_action = [(curr_action[0] * forward_per_sec), (curr_action[1] * forward_per_sec)]
-            
+            cd_x, cd_y = float(gps.getValues()[0]), float(gps.getValues()[1])
             goal_posx, goal_posy = curr_action[0] + cd_x, curr_action[0] + cd_y # TODO: not correct, but logic is there 
             
             # Bound goal_posx between -1 and 1
@@ -468,7 +482,7 @@ while robot.step(timestep) != -1 and sim_complete != True:
             if math.dist([cd_x, cd_y], [goal_posx,goal_posy]) > 0.05:  
                 if robot.getTime() - prev_time > time_allocated: # if unable to complete, not encouraged
                     rew = reward()
-                    msg = f'action-complete:{rew}:{get_obs()}'
+                    msg = f'action-complete:{rew}:{get_obs([cd_x,cd_y])}'
                     emitter_individual.send(msg.encode('utf-8'))
                     prev_time = robot.getTime()
                 else: 
@@ -476,7 +490,7 @@ while robot.step(timestep) != -1 and sim_complete != True:
             else: # request new action 
                 # print(f'successfully reached next pos: {goal_posx}, {goal_posy} with dis {math.dist([cd_x, cd_y], [goal_posx,goal_posy])} with curr time {robot.getTime()}')
                 rew = reward()
-                msg = f'action-complete:{rew}:{get_obs()}'
+                msg = f'action-complete:{rew}:{get_obs([cd_x,cd_y])}'
                 emitter_individual.send(msg.encode('utf-8'))
     
         roll, pitch, yaw = inertia.getRollPitchYaw()
@@ -510,7 +524,9 @@ while robot.step(timestep) != -1 and sim_complete != True:
         # collision avoidance mechanism     
         dist_val = ds.getValue()
         dist_vals = [ds.getValue(), ds_left.getValue(), ds_right.getValue()]
-                
+               
+        # TODO: need to remove collision avoidance, should be part of learning as well? 
+
         if min(dist_vals) > 500 and reversing: # no longer within range of obstacle
             # print('proceeding with navigation')
             reversing = False

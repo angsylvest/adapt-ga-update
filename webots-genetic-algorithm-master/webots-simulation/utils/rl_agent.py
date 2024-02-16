@@ -2,7 +2,7 @@ import numpy as np
 
 class RLAgent():
     def __init__(self):
-        self.observation = []
+        self.observation = np.concatenate((np.array([0,0]), np.array([1000]), np.array([1000]), np.array([1000])))
         self.action = [] 
         self.goal = ()
         self.isAvoiding = False 

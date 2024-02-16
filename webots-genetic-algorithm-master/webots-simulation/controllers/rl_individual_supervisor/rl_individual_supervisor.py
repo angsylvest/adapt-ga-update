@@ -3,6 +3,7 @@ import math
 from robot_pop import * 
 import random
 import time 
+import re
 
 import sys 
 sys.path.append('../../')
@@ -331,17 +332,30 @@ def message_listener(time_step):
         # print('indiviudal msgs --', message_individual)
 
         if 'action-complete' in message_individual: 
-            Agent.reward = float(message_individual.split(":")[-2])
-            Agent.observation = float(message_individual.split(":")[-1]) # TODO: not correct yet
+            Agent.reward = float(message_individual.split(":")[1])
+
+            # Use regular expression to find the dictionary portion
+            pattern = r'{.*}'
+            match = re.search(pattern, message_individual)
+            dictionary = "" 
+
+            if match:
+                dictionary_string = match.group(0)
+                dictionary = eval(dictionary_string)
+
+            else:
+                print("Dictionary not found in input string.")
+
+            Agent.observation = np.concatenate((np.array(dictionary["agent"]),np.array(dictionary["ultrasonic"]), np.array(dictionary["ultrasonic_left"]), np.array(dictionary["ultrasonic_right"])))                 
             obs, rew, done = Agent.observation, Agent.reward, Agent.done
 
             if len(batch_observations) > 0 and online: 
                 batch_observations = torch.tensor(batch_observations, dtype = torch.float)
                 batch_acts = torch.tensor(batch_actions, dtype = torch.float)
                 batch_log_probs = torch.tensor(batch_log_probs, dtype = torch.float)
-                print('intial batch_rewards - ', batch_rewards)
+                # print('intial batch_rewards - ', batch_rewards)
                 batch_rewards.append(ep_rews)
-                print('final batch_rewards - ', batch_rewards)
+                # print('final batch_rewards - ', batch_rewards)
                 batch_rtgs = model.compute_rtgs(batch_rewards) # TODO: should be batch_rewards instead of ep_rews
                 batch_lens = [600] # TODO: update so correct 
                 print('converted to torch')
@@ -366,8 +380,8 @@ def message_listener(time_step):
             # update action and tell agent to execute 
             # curr_action = Agent.action  
             pos = np.array([population[given_id].getPosition()[0], population[given_id].getPosition()[1]])
-            Agent.set_location((population[given_id].getPosition()[0], population[given_id].getPosition()[1])) 
-            action, log_prob = model.get_action(pos) 
+            Agent.set_location(pos) 
+            action, log_prob = model.get_action(Agent.observation) 
             Agent.action = action[0] 
             
             discretized_action = np.argmax(action).item() # TODO: might not be correct, index of the maximum value in your continuous vector as a discrete action
@@ -410,7 +424,7 @@ def update_batch_info():
         prev_time = robot.getTime()
         # print(f'batch_observations: {batch_observations}')
         # update info 
-        batch_observations.append((population[given_id].getPosition()[0], population[given_id].getPosition()[1]))
+        batch_observations.append(Agent.observation)
         batch_actions.append(Agent.action)
         ep_rews.append(Agent.reward)
         batch_log_probs.append(Agent.log_prob)
