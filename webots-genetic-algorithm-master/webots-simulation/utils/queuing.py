@@ -6,6 +6,8 @@ class DecisionTree:
         self.num_actions = num_actions
         self.root = Node()
 
+        self.use_preset = False
+
     def select(self, node, exploration_weight=1.0):
         """Select a child node based on UCB1 exploration-exploitation strategy."""
         if not node.children:
@@ -62,7 +64,12 @@ def iterate(tree, max_depth=10):
         if action not in selected_node.children:
             selected_node = tree.expand(selected_node, action)
             accumulated_actions.append(action)
-            return f'action: {accumulated_actions}', selected_node
+
+            if not tree.use_preset: 
+                return f'action: {accumulated_actions}', selected_node
+            
+            else:
+                action = np.random.choice(range(tree.num_actions))
 
         else:
             selected_node = selected_node.children[action]

@@ -6,6 +6,9 @@ class DecisionTree:
         self.num_actions = num_actions
         self.root = Node()
 
+        self.use_preset = False
+
+
     def select(self, node, exploration_weight=1.0):
         """Select a child node based on UCB1 exploration-exploitation strategy."""
         if not node.children:
@@ -26,7 +29,7 @@ class DecisionTree:
         node.children[action] = new_node
         return new_node
     
-    def flocking_reward(self, path_length, time_stagnation):
+    def flocking_reward(self, path_length, time_stagnation): # maybe time_stagnation is time in collision phase 
         time_stag_pen = 0.01 
         alpha = 0.1
         gen_path_reward = math.exp(-alpha * path_length)
@@ -59,15 +62,21 @@ def iterate(tree, max_depth=10):
     accumulated_actions = []
 
     while depth_exists and curr_depth < max_depth:
+        
         if action not in selected_node.children:
             selected_node = tree.expand(selected_node, action)
             accumulated_actions.append(action)
-            return f'action: {accumulated_actions}', selected_node
+
+            if not tree.use_preset: 
+                return f'action: {accumulated_actions}', selected_node
+            
+            else:
+                action = np.random.choice(range(tree.num_actions))
 
         else:
             selected_node = selected_node.children[action]
-            action = np.random.choice(range(tree.num_actions))
             accumulated_actions.append(action)
+            action = np.random.choice(range(tree.num_actions))
 
             if action == 1:
                 return f'action: {accumulated_actions}', selected_node
