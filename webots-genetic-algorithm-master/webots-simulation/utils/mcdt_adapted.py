@@ -2,7 +2,7 @@ import numpy as np
 import math 
 
 class DecisionTree:
-    def __init__(self, num_actions=2):
+    def __init__(self, num_actions=2): # TODO: if dispersion, would be 3
         self.num_actions = num_actions
         self.root = Node()
 
@@ -52,7 +52,7 @@ class Node:
         self.visits = 0
         self.total_reward = 0
 
-def iterate(tree, max_depth=10):
+def iterate(tree, max_depth=10): # TODO: if queueing, max_depth should be based on number of agents
     selected_node = tree.root
     action = np.random.choice(range(tree.num_actions))
 
