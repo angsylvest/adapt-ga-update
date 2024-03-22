@@ -265,7 +265,7 @@ def message_listener(time_step):
             
             # set action for corresponding robot 
             pos = np.array([population[given_id].getPosition()[0], population[given_id].getPosition()[1]])
-            curr_action, log_probs = model.get_action(pos)
+            curr_action, log_probs = model.get_action(Agent.observation)
             Agent.action = curr_action[0] 
             # print(f'initial action for agent {assigned_r_name} with action : {curr_action} for {type(curr_action)}')
             # discretized_action = np.argmax(curr_action).item() # TODO: might not be correct, index of the maximum value in your continuous vector as a discrete action
@@ -323,7 +323,7 @@ def message_listener(time_step):
             receiver.nextPacket()
             
         else: 
-            print('skipping')
+            print(f'skipping: {message}')
             receiver.nextPacket()
             
     if receiver_individual.getQueueLength()>0:  

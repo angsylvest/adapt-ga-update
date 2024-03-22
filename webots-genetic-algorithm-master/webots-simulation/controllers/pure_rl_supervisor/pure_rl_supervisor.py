@@ -32,7 +32,7 @@ num_agents = 2
 
 # hyperparameters 
 timesteps_per_batch = 4800 
-max_timesteps_per_episode = 30 # TODO: change to 600 once troubleshooted 
+max_timesteps_per_episode = 300 # TODO: change to 600 once troubleshooted 
 n_updates_per_iteration = 5
 lr = 0.005
 gamma = 0.95
@@ -48,10 +48,10 @@ collected_count = []
 
 # # genetic algorithm-specific parameters 
 # num_generations = 10
-simulation_time = 30
+simulation_time = 300
 # trials = 25
 # curr_trial = 0 
-robot_population_sizes = [1]
+robot_population_sizes = [5]
 # gene_list = ['control speed 10', 'energy cost 5', 'food energy 30', 'observations thres 5']
 curr_size = robot_population_sizes[0]
 env_type = "single source" # "power law"
