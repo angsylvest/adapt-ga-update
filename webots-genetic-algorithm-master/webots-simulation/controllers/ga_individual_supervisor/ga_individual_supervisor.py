@@ -159,7 +159,7 @@ def message_listener(time_step):
 
     if receiver.getQueueLength()>0:
         message = receiver.getString()
-        # print(f'individual msgs: {message}')
+        # print(f'in the individual msgs: {message}')
             
         if 'fitness-scores' in message:
             fs = message.split(" ")[1:]
@@ -232,12 +232,12 @@ def message_listener(time_step):
             
     if receiver_individual.getQueueLength()>0:  
         message_individual = receiver_individual.getString()
-        # print('indiviudal msgs --', message_individual)
+        print('indiviudal msgs --', message_individual)
             
         if 'encounter' in message_individual: 
             robo_index = int(message_individual.split('-')[0])
             # reproduce_list.append(robo_index) 
-            print('robot found -- checking genotype', message_individual) 
+            # print('robot found -- checking genotype', message_individual) 
             curr_orient = message_individual.split('[')[-1]
             agent_list = {}
             curr_pose = ()
@@ -256,7 +256,8 @@ def message_listener(time_step):
                         agent_list[ind] = (round(rob.getPosition()[0],2), round(rob.getPosition()[1],2))
                         if curr_robot_index == ind: 
                             curr_pose = agent_list[ind] # round((float(population[curr_robot_index].getPosition()[0])),2), round(float(population[curr_robot_index].getPosition()[1]),2)
-                # print(f'current agent_list {agent_list} vs {curr_pose}')
+                print(f'curr robot index {curr_robot_index}')
+                print(f'current agent_list {agent_list} vs {curr_pose} with {curr_robot_index}')
                 shared_map_complete.update_agent_positions(agent_list)
                 # curr_pose = round((float(population[curr_robot_index].getPosition()[0])),2), round(float(population[curr_robot_index].getPosition()[1]),2)
 

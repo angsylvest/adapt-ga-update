@@ -882,6 +882,7 @@ def interpret(timestep):
             
         elif 'generation-complete' in message: 
             msg = f"assigned-{given_id}"
+            print(f'sending msg: {msg}')
             emitter_individual.send(msg.encode('utf-8'))
             receiver.nextPacket()
             
@@ -1032,6 +1033,7 @@ def interpret(timestep):
             
     if receiver_individual.getQueueLength()>0:
         message = receiver_individual.getString()
+        # print(f'msgs from individual {message}')
 
         if 'child' in message and communication: 
             next_child = message[5:].split("*")
@@ -1376,8 +1378,9 @@ while robot.step(timestep) != -1 and sim_complete != True:
                     # attempt to get object detected 
                     if min(dist_vals) < 500 and len(list) != 0:
                         firstObject = camera.getRecognitionObjects()[0]
+                        print(f'obj found {firstObject}')
                         count = len(camera.getRecognitionObjects())
-                        id = str(firstObject.get_id())
+                        id = str(firstObject.getId())
                         if id not in obj_found_so_far:
                             id = "$" + str(given_id) + "-" + str(id) # indication that it is a object to be deleted 
                             if prev_msg != id: 

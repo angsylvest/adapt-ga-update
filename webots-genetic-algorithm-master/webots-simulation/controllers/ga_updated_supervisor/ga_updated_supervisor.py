@@ -760,6 +760,7 @@ def run_optimization():
             msg = 'generation-complete '+ ' '.join(pop_genotypes)
             
             emitter_individual.send(str(msg).encode('utf-8'))
+            emitter.send(str(msg).encode('utf-8'))
             
             
             for rec_node in population: 
