@@ -2,11 +2,15 @@ from controller import Supervisor, Node, Keyboard, Emitter, Receiver, Field
 import math 
 from robot_pop import * 
 import random
+import ast
 
 # ensure that we can access utils package to streamline tasks 
 import sys 
 sys.path.append('../../')
 import utils.environment as env_mod 
+import utils.globals as globals
+import utils.k_means as k_means
+import utils.shared_map as shared_map
 
 from math import pi
 
@@ -26,13 +30,16 @@ num_generations = 10
 simulation_time = 30
 trials = 25
 curr_trial = 0 
-robot_population_sizes = [5]
+robot_population_sizes = [5, 10, 15]
 gene_list = ['control speed 10', 'energy cost 5', 'food energy 30', 'observations thres 5']
 curr_size = robot_population_sizes[0]
-env_type = "single source" # "power law"
-sim_type = "random"
-communication = True
-high_dense = True
+env_type = globals.env_type # "single source" # "power law"
+sim_type = globals.sim_type #"random"
+communication = globals.communication # True
+high_dense = globals.using_high_dens #True
+using_bayes = globals.using_bayes
+
+assigned_teams = {}
 
 # collected counts csv generation 
 overall_f = open(f'../../graph-generation/collection-data/overall-df-{sim_type}-{curr_size}-comm_{communication}-dense_{high_dense}.csv', 'w')
@@ -83,6 +90,7 @@ prev_msg = ""
 seed_val = 11
 random.seed(seed_val)
 id_msg = ""
+id_ind = ""
 
 emitter_individual = robot.getDevice("emitter_processor")
 emitter_individual.setChannel(5)
@@ -94,8 +102,20 @@ central = True
 # generate envs 
 curr_env = env_mod.Environment(env_type=env_type, seed = seed_val)
 
+input_from_others = {}
+info_garnered = []
+prev_time = robot.getTime()
+msg = ""
+
+def message_sender(msg, individual = False):
+    if not individual: 
+        emitter.send(msg.encode('utf-8'))
+    else:  
+        emitter_individual.send(msg.encode('utf-8'))
+
 # set up environments 
 def generate_robot_central(num_robots):
+
     global fitness_scores 
     global collected_count 
     global population
@@ -105,6 +125,9 @@ def generate_robot_central(num_robots):
     global overall_fitness_scores
     global prev_msg 
     global id_msg
+    global id_ind
+    
+    global input_from_others
     
     initialize_genotypes(num_robots)
     curr_msg = str("size-" + str(num_robots))
@@ -124,8 +147,10 @@ def generate_robot_central(num_robots):
     collected_count = []
     pairs = []
     id_msg = "ids"
+    id_ind = "id_ind"
         
     for i in range(num_robots):
+        curr_key = f'agent-{i}'
         rootNode = robot.getRoot()
         rootChildrenField = rootNode.getField('children')
         if i == 0: 
@@ -142,7 +167,7 @@ def generate_robot_central(num_robots):
         # rec_node = robot.getFromDef('khepera') 
         t_field = rec_node.getField('translation')
        
-        
+        input_from_others[curr_key] = 0
         
         pose = [round(random.uniform(0.3, -0.3),2), round(random.uniform(0.3, -0.3) ,2), 0.02]
         while pose in r_pos_to_generate: # remove any duplicates
@@ -158,6 +183,7 @@ def generate_robot_central(num_robots):
         collected_count.append(0)
         population.append(rec_node)
         id_msg += " " + str(rec_node.getId()) 
+        id_ind += " " + curr_key
 
 # set up environments 
 def generate_robot_edge(num_robots, right = False):
@@ -392,6 +418,37 @@ def message_listener(time_step):
                             prev_msg = msg
                     
             receiver.nextPacket()
+
+        if 'agent' in message:
+            print(f'agent message: {message}')
+            agent_dict = {}
+            info_garnered = []
+            message_parsed = message.split('~')[0].split('-')
+            # print(f'parsed msg: {message_parsed}')
+            agent_info = message_parsed[0].split(':')[1]
+            # Convert the string to a dictionary using ast.literal_eval()
+            proposed_strat = ast.literal_eval(message_parsed[1].split(':')[1])
+            # print(f'parsed strat: {message.split("~")[1][5:]}')
+            strat_parsed = ast.literal_eval(str(message.split('~')[1][5:]))
+            
+            
+            poses = ast.literal_eval(message.split('~')[0].split(':')[3])
+            posx = poses[0]
+            posy = poses[1]
+            
+            agent_dict[agent_info] = (proposed_strat, (posx, posy), strat_parsed)
+            
+            info_garnered.append(agent_dict)
+            mediate_differences(info_garnered)
+            
+            #if len(info_garnered) > 5 or (robot.getTime() - prev_time) > 10: 
+            #   mediate_differences(info_garnered)
+            #  info_garnered = []
+            # prev_time = robot.getTime()
+            #else: 
+            #   info_garnered.append(message)
+                
+            receiver.nextPacket()
         
         elif 'fitness' in message: 
             fit = message.split('-')[1][7:] 
@@ -480,6 +537,98 @@ def run_seconds(t,waiting=False):
                 break      
     return 
    
+        
+def create_reverse_lookup_dict(dictionary):
+    return {value: key for key, value in dictionary.items()}
+
+def get_key_by_value(dictionary, value):
+    reverse_lookup_dict = create_reverse_lookup_dict(dictionary)
+    return reverse_lookup_dict.get(value)
+
+def mediate_differences(msgs):
+    # assuming msgs is a list of suggestions
+    # ex format: [{agent_id: (strat, curr_pose)} ..] 
+    # print(f'messages: {msgs}')
+    global prev_msg
+    global msg 
+    
+    cluster_list = []
+    ids = []
+    master_dict = {}
+    agent_pos = {}
+    
+    for a in msgs: 
+        # print(f'a in messages {a}')
+        
+        # for each dict of strategies in list (from each individual agent) 
+        # [{'0': (1, (0.04, 0.0), '{0: (0.04, -0.04), 1: (-0.25, 0.02), 2: (-0.05, -0.07), 3: (0.19, -0.01), 4: (-0.08, -0.18)}')}]
+        for key in a: 
+            agent_info = a[key]
+            
+            info_from_strat = agent_info[2]
+            curr_pose = agent_info[1]
+                
+            for a in info_from_strat: 
+                (x,y) = info_from_strat[a]
+                master_dict[(x,y)] = a 
+                if (x,y) not in cluster_list: 
+                    x,y = info_from_strat[a]
+                    cluster_list.append((x,y))
+                    
+                    
+    # print(f'master agent_pos: {master_dict}')
+            
+
+    cluster_merged = k_means.output_k_means_with_cluster(cluster_list, len(msgs))
+    
+        
+    # print(f'(merged) cluster list: {cluster_merged}')
+    clustered_data = {}
+    proposals = []
+
+    for i, cluster in enumerate(cluster_merged):
+        strats = []
+        proposals = []
+        agent_pos = {}
+        
+        # print(f'cluster: {cluster}')
+        c = cluster
+        
+        for pos in c: 
+            agent_pos[master_dict[pos]] = pos
+      
+            # Find the original dictionary containing curr_pose
+            for agent_dict in msgs:
+                # print(f'agent_dict: {agent_dict}')
+                for a, (strat, curr_pose, prop) in agent_dict.items():
+                    p = prop
+                    # print(f'iterating over diff items: index {a}, {strat}, {p}, pose {pos} and {curr_pose}')
+                    if curr_pose == pos:
+                        # print('here')
+                        proposals.append(p)
+                        strats.append(strat)
+                        break  # Stop iterating if we found the strategy for this position
+        # print(f'strats at the moment: {strats}')
+        # Find the most frequently chosen strategy in the cluster
+        most_common_strat = max(set(strats), key=strats.count)
+        # print(f'updated agent pos: {agent_pos}')
+
+        localMap = shared_map.LocalMap(obstacle_pos=[], obstacle_size=0.2, agent_pos=agent_pos, agent_size= 0.5, local_dim=1.0, x_bounds=(-1,1), y_bounds=(-1,1), central_loc=()) # just used to generate strat
+        strat_plan = localMap.process_output(most_common_strat)
+        center = localMap.calculate_center(localMap.agent_pos)
+        clustered_data[i] = [{'most_common_strat': most_common_strat, 'strat_to_use': strat_plan, 'neighbors': agent_pos, 'center': localMap.calculate_center(agent_pos)}]
+
+        # print(f'generated strategy for cluster: {strat_plan}')
+    # Example output: {0: [{'most_common_strat': 'most_common_strat1'}], ...}
+    final_deliberation = clustered_data
+    print(f'final deliberation: {final_deliberation}')
+    
+    # if prev_msg != msg:
+    msg = f'final-delib:{final_deliberation}'
+    message_sender(msg, individual=False)
+    
+    # prev_msg = msg
+    
 # will use selected partners from each robot and reproduce with that corresponding index, and update population at the end of gen          
 def update_geno_list(genotype_list): 
     global fitness_scores

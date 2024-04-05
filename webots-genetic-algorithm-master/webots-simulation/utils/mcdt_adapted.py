@@ -95,3 +95,6 @@ for i in range(10):
     action, node = iterate(decision_tree)
     print(f'From the decision tree: action: {action} and the node {node}')
 
+
+
+

@@ -17,6 +17,10 @@ import random
 import sys 
 sys.path.append('../../')
 import utils
+import utils.bayes as bayes 
+import utils.globals as globals
+import utils.mcdt as mcdt
+import ast 
 
 # create the Robot instance.
 robot = Robot()
@@ -88,9 +92,20 @@ repopulate = False
 
 next_child = ""
 num_better = 0 
-sim_type = "random" 
-communication = False 
-using_high_dens = True 
+sim_type = globals.sim_type #"random" 
+communication = globals.communication # False 
+using_high_dens = globals.using_high_dens # True 
+decentralized = globals.decentralized
+num_coordination = 3 
+curr_node = ""
+assigned_leader = "!" 
+
+if decentralized:
+    # create tree for each type of coord 
+    trees = [mcdt.DecisionTree(num_actions=n) for n in [2, 2, 3]]
+    decent_index = 0
+    decent_behaviors = []
+    curr_others = {}
 
 gens_elapsed = 0 
 
@@ -98,12 +113,16 @@ terrains = ['normal', 'road']
 current_terrain = terrains[0] # either normal or road 
 prev_terrain = terrains[0]
 
+time_as_leader = robot.getTime()
+is_leader = False
+
 # generalize id acquisition
 if robot.getName() == "k0":
     given_id = 0
     
 else: 
     given_id = robot.getName()[3:-1]
+    
     
 ### emitter to be sent to individual supervisor #### 
 emitter_individual = robot.getDevice("emitter_processor")
@@ -156,13 +175,35 @@ time_elapsed = 0 # on a per sec basis
 # prev message (limit overloading receiver/emitter system) 
 prev_msg = "" 
 trial_num = -1 
+prev_time = robot.getTime()
+time_allocated = 10 # worst case 
+curr_action = []
+type_of_action = []
+time_queued = robot.getTime()
+path_length = 0
+path_info = {'path_length': 0, 'num_collisions': 0}
 
 found_something = False 
 
 agent_observation = {'num_interactions': 0, 'num_objects_observed': 0, 'num_collisions':0}
+strat_obs = {0: {"collisions": 0, "collected": 0}, 1: {"collisions": 0, "collected": 0}, 2: {"collisions": 0, "collected": 0}, 3:{"collisions": 0, "collected": 0}}
 time_into_generation = 0 
 using_artificial_field = False
+using_bayes = globals.using_bayes
+using_coordination = globals.use_coordination
 remove_orientations = []
+time_in_action = robot.getTime()
+is_leader = False 
+time_as_leader = robot.getTime()
+
+
+
+if using_bayes:
+    multi_arm = bayes.NArmedBanditDrift(len(observations_per_strategy))
+
+elif globals.using_ucb:
+    multi_arm = mcdt.MonteCarloSingleDecisionTree(len(observations_per_strategy))
+
 
 def identify_terrain(r,g,b):
     global terrains
@@ -179,6 +220,207 @@ def identify_terrain(r,g,b):
     else: 
         current_terrain = terrains[0]
 
+def reward(curr_strat):
+    # based around reward shaping 
+    global t_elapsed_block_total
+    global n_observations_block
+    global fitness 
+    global obj_weight 
+    global obstacle_weight
+    global strat_obs
+
+    # priorities in foraging task 
+    # 1. num collected using strat 
+    # 2. num collisions  
+
+    if strat_obs[curr_strat]["collisions"] != 0:
+        obs_penalty = (1/strat_obs[curr_strat]["collisions"]) * 1.5
+    else: 
+        obs_penalty = 1.5 # reward highly lack of collisions
+    goal_reward = strat_obs[curr_strat]["collected"] * 1.5
+
+    return obs_penalty + goal_reward
+
+
+def process_decentralized(type, node=None, action=None, neighb=None, center=None):
+    global decent_index
+    global decent_behaviors
+    global type_of_action
+    global curr_action
+    global forward_speed
+
+    global curr_others
+    global assigned_leader
+    global given_id
+
+    global cd_x
+    global cd_y
+
+    goal_orientations = []
+    neighbors = neighb if neighb is not None else curr_others
+    length_of_action = len(action) # TODO: need to fix
+
+    decent_behaviors = []
+    decent_index = 0
+
+    # TODO: different set up depending on if initlally called or called afterewards
+    
+
+    # set as curr_action here 
+    if type == 0: # flock 
+        # id type of flocking / send msg to individual supervisor to track
+        if is_leader: 
+            centerx, centery = center
+            dir = round(math.atan2(centery-cd_y,centerx-cd_x),2) 
+            filter_out = closest_reference_angle(dir)
+            list_of_dir = [0.00, round(pi, 2), round(pi/2, 2), round(-pi/2, 2)]
+            if filter_out in list_of_dir: # remove requesting same dir 
+                list_of_dir.remove(round(filter_out,2))
+
+            random_index = random.randint(0,2)
+            act = list_of_dir[random_index]
+
+            ratio = 0.12
+            base = 0.180
+            norm = forward_speed - 5
+            forward_per_sec = ratio * norm + base 
+
+            dx = forward_per_sec*(time_allocated) * math.cos(act)
+            dy = forward_per_sec*(time_allocated) * math.sin(act)
+
+            goal_position = (cd_x + dx, cd_x + dy)
+
+            curr_action = goal_position # '!'
+            decent_index = -1
+
+
+        else: 
+            # set goal position based on where leader is
+            curr_action = neighbors[assigned_leader]
+ 
+
+    elif type == 1: # queue 
+        # wait will be sampled 
+        for i in range(length_of_action):
+            decent_behaviors.append((cd_x, cd_y))
+            # decent_behaviors[i] = (cd_x, cd_y) #  only able to stay in current pos 
+            curr_action = '!'
+
+    elif type == 2: # disperse 
+        # distance/time based on sampled action 
+        # use filtered_random function once get pos from center
+        centerx, centery = center
+        dir = round(math.atan2(centery-cd_y,centerx-cd_x),2) 
+        filter_out = closest_reference_angle(dir)
+        list_of_dir = [0.00, round(pi, 2), round(pi/2, 2), round(-pi/2, 2)]
+        if filter_out in list_of_dir: # remove requesting same dir 
+            list_of_dir.remove(round(filter_out,2))
+
+        ratio = 0.12
+        base = 0.180
+        norm = forward_speed - 5
+        forward_per_sec = ratio * norm + base 
+        
+        # TODO: must fix 
+        for i in range(length_of_action):
+            act = list_of_dir[action[i]]
+
+            dx = forward_per_sec * math.cos(act)
+            dy = forward_per_sec * math.sin(act)
+        
+            if i == 0: 
+                goal_position = (cd_x + dx, cd_x + dy)
+            # curr_action = goal_position
+            else: 
+                x, y = goal_position
+                goal_position = (x + dx, y + dy)
+            
+            
+            decent_behaviors.append(goal_position)
+            # decent_behaviors[i] = list_of_dir[act]
+        
+        curr_action = '!'
+        
+    print(f'updated action for {given_id}: {curr_action} with type {type}')
+
+
+def closest_reference_angle(dir): # center pos_x, pos_y
+    angle = dir # math.atan2(pos_y - agent_y, pos_x - agent_x) 
+    reference_angles = [0, round(math.pi/2,2), round(math.pi,2), round(-math.pi/2,2)]
+    closest_angle = min(reference_angles, key=lambda x: abs(x - angle))
+
+    if closest_angle == 0:
+        return 0.00
+    elif closest_angle == math.pi/2:
+        return round(math.pi/2,2)
+    elif closest_angle == math.pi:
+        return round(math.pi,2)
+    elif closest_angle == -math.pi/2:
+        return round(-math.pi/2,2)
+    else:
+        return "Invalid angle"
+
+def process_action(current_pos):
+    global curr_action 
+    global type_of_action 
+    global time_queued
+    global given_id
+    global coord_status
+
+    global is_leader
+    global time_as_leader
+    global cd_x
+    global cd_y
+    
+    x,y = current_pos
+    
+    if type_of_action == 0: # flock
+        # just continue moving to spot
+        # print(f'flocking')
+        
+        if curr_action == 'leader':
+            is_leader = True
+            curr_action = []
+            coord_status = True # just proceed with original movement 
+        else: 
+            is_leader = False 
+            goalx, goaly = curr_action 
+            if (math.dist([x, y], [goalx,goaly]) > 0.05): 
+                coord_status = False 
+            else: 
+                coord_status = True
+        
+    elif type_of_action == 1: # queue
+        # print(f'queuing')
+        is_leader = False
+        if robot.getTime() - time_queued >= curr_action: 
+            coord_status = True 
+            curr_action = [] 
+            # wait
+        else: 
+            # can do action
+            # time_queued = robot.getTime()
+            coord_status = False        
+    
+    elif type_of_action == 2: # disperse
+        # print(f'dispersing')
+        is_leader = False
+        goalx, goaly = curr_action 
+        if (math.dist([x, y], [goalx,goaly]) > 0.05): 
+            coord_status = False 
+        else: 
+            coord_status = True 
+    
+    else: 
+        print('action doesnt exist')
+        
+    return coord_status 
+
+def path_length_reward(path_length, alpha=0.1):
+    # print(f'path length: {path_length}')
+    reward = math.exp(-alpha * path_length)
+    # print(f'reward: {1-neg_reward}')
+    return reward
 
 # calculates angle normal to current orientation 
 def calc_normal(curr_angle): 
@@ -295,23 +537,39 @@ def choose_strategy(curr_dir, t_block, t_robot, original_weights, update = False
     global curr_sim_size
     global current_strat_index 
     global weights 
-    
+    global observations_per_strategy 
     
     # want to update weights based off effectiveness of current strategy 
     if update: 
-        new_weights = create_new_weights(t_block, t_robot, original_weights)
-        weights = new_weights 
-        strat = random.choices(['straight','alternating-left','alternating-right', 'true random'], new_weights)[0]
-        # print('current strat', strat)
-        current_strat_index = ['straight','alternating-left','alternating-right', 'true random'].index(strat) 
-        # strategy_f.write(str(given_id) + ','+ str(robot.getTime()) + ',' + str(original_weights[0]) + ',' + str(original_weights[1]) + ',' + str(original_weights[2]) + ',' + str(original_weights[3]) + ','+ str(t_block) + ',' + str(curr_sim_size) + ',' + str(calc_robot_fitness())+ ',' + str(curr_sim_size) + ',ga' +'\n')
-        # strategy_f.close()
-        # strategy_f = open("../../graph-generation/collision-data/ga-info.csv", 'a')
+        if not using_bayes and not globals.using_ucb: 
+            new_weights = create_new_weights(t_block, t_robot, original_weights)
+            weights = new_weights 
+            strat = random.choices(['straight','alternating-left','alternating-right', 'true random'], new_weights)[0]
+            # print('current strat', strat)
+            current_strat_index = ['straight','alternating-left','alternating-right', 'true random'].index(strat) 
+            # strategy_f.write(str(given_id) + ','+ str(robot.getTime()) + ',' + str(original_weights[0]) + ',' + str(original_weights[1]) + ',' + str(original_weights[2]) + ',' + str(original_weights[3]) + ','+ str(t_block) + ',' + str(curr_sim_size) + ',' + str(calc_robot_fitness())+ ',' + str(curr_sim_size) + ',ga' +'\n')
+            # strategy_f.close()
+            # strategy_f = open("../../graph-generation/collision-data/ga-info.csv", 'a')
+        else: # bayes weight updating 
+            if using_bayes: 
+                re = reward(current_strat_index)
+                multi_arm.advance(current_strat_index, re) # action, reward_accum
+                current_strat_index = multi_arm.sample_action()
+                strat = ['straight','alternating-left','alternating-right', 'true random'][current_strat_index]
+            elif globals.using_ucb:
+                pass
 
     if not update: 
-        strat = random.choices(['straight','alternating-left','alternating-right', 'true random'], original_weights)[0]
-        current_strat_index = ['straight','alternating-left','alternating-right', 'true random'].index(strat)
-    
+        if not using_bayes and not globals.using_ucb: 
+            strat = random.choices(['straight','alternating-left','alternating-right', 'true random'], original_weights)[0]
+            current_strat_index = ['straight','alternating-left','alternating-right', 'true random'].index(strat)
+        else: 
+            if using_bayes: 
+                current_strat_index = multi_arm.sample_action()
+                strat = ['straight','alternating-left','alternating-right', 'true random'][current_strat_index]
+            elif globals.using_ucb:
+                pass
+
     if strat == 'straight':
         return [curr_dir, curr_dir, curr_dir, curr_dir]
     elif strat == 'alternating-right':
@@ -321,7 +579,7 @@ def choose_strategy(curr_dir, t_block, t_robot, original_weights, update = False
     else: #  correlated random
         return [correlated_random(curr_dir), correlated_random(curr_dir), correlated_random(curr_dir), correlated_random(curr_dir)]
     
-    
+
 def create_new_weights(t_block, t_robot, original_weights): 
     # print('original weights --', original_weights)
     global curr_best_weights
@@ -439,13 +697,36 @@ def interpret(timestep):
     
     global curr_index 
     global remove_orientations
+    global strat_obs
+    global multi_arm
+
+    global type_of_action
+    global path_length 
+    global curr_action
+    global time_queued
+    global prev_time
+    global cd_x
+    global cd_y
+    global forward_speed
+    global time_allocated
+
+    global is_leader
+    global time_as_leader
+    global holding_something
+    global trees
+    global curr_others
+    global curr_node 
+    global assigned_leader 
+
+    global decent_behaviors
+    global decent_index
+    global path_info
+    global using_best 
 
     
     if receiver.getQueueLength()>0:
-        # message = receiver.getData().decode('utf-8')
-        # message = receiver.getData().decode('utf-8')
         message = receiver.getString()
-        # print('incoming messages: ', given_id, message) 
+        # print('incoming messages (controller): ', given_id, message) 
     
         # intertrial changes 
         if message[0:2] == "#" + str(given_id):
@@ -492,6 +773,7 @@ def interpret(timestep):
                 # print('current child', next_child)
             
             emitter.send(response.encode('utf-8'))
+            
             # found_something = False 
             # obj_found_so_far = []
             receiver.nextPacket()
@@ -505,6 +787,7 @@ def interpret(timestep):
             # resets relevant statistics 
             trial_num = int(message[5:])
             print('end of trial, moving on to next trial', trial_num)
+            strat_obs = {0: {"collisions": 0, "collected": 0}, 1: {"collisions": 0, "collected": 0}, 2: {"collisions": 0, "collected": 0}, 3:{"collisions": 0, "collected": 0}}
             gens_elapsed = 0
             fitness = 0 # number of obstacles 
             best_prev_genotype = '!'
@@ -516,6 +799,7 @@ def interpret(timestep):
             observations_per_strategy_high_dens = [1, 1, 1, 1] # num successes using each (set to 1 so that there is still likelihood for gathering strategy) 
             
             current_strat_index = 0
+            using_best = False 
             
             t_elapsed_block_total = 0
             n_observations_block = 0
@@ -533,6 +817,23 @@ def interpret(timestep):
             obj_found_so_far = []
             curr_index = 0 
             remove_orientations = []
+
+            decent_index = 0
+            decent_behaviors = []
+            curr_action = []
+            curr_others = []
+            path_info = {'path_length': 0, 'num_collisions': 0}
+            is_leader = False
+
+            type_of_action = 0
+            msg = f"assigned-{given_id}"
+            emitter_individual.send(msg.encode('utf-8'))
+
+            if using_bayes:
+                multi_arm.reset_prior()
+
+            if globals.using_ucb:
+                multi_arm.reset()
             
             receiver.nextPacket()
             
@@ -573,9 +874,15 @@ def interpret(timestep):
 
             n_observations_block += 1 
             gens_elapsed = 0
+            strat_obs[current_strat_index]["collected"] += 1
             
             # observations_per_strategy[current_strat_index] += 1
             energy_collected_gen += 1
+            receiver.nextPacket()
+            
+        elif 'generation-complete' in message: 
+            msg = f"assigned-{given_id}"
+            emitter_individual.send(msg.encode('utf-8'))
             receiver.nextPacket()
             
         elif 'size' in message:
@@ -607,6 +914,100 @@ def interpret(timestep):
             
             receiver.nextPacket()
             
+
+        elif 'final' in message: 
+            # print(f'final msg received -- {message}')
+            if (not is_leader or (robot.getTime() - time_as_leader >= time_allocated and is_leader and not decentralized) or (decentralized and curr_action == [])) and not holding_something: # curr_action == []: # if able to take on new task 
+                prev_time = robot.getTime()
+                
+                path_length = 0 # path length reset
+                path_info = {'path_length': 0, 'num_collisions': 0}
+            
+                dict_version = ast.literal_eval(message[12:])
+                # print(f'were in actual chunk dict version: {dict_version}')
+                agent_id = int(f'{given_id}')
+                is_leader = False
+                
+            
+                for key in dict_version: # it's a list for some dumb reason 
+                #    print(f'key {key}')
+                   cluster_dict = (dict_version[key][0])
+                   strat = cluster_dict['strat_to_use']
+
+
+                # print(f'strat: {strat} vs agent_id {agent_id}')
+                if agent_id in strat:
+                    curr_action = strat[agent_id]
+                    type_of_action = cluster_dict['most_common_strat']
+                    neighbors = cluster_dict['neighbors']
+                    center = cluster_dict['center']
+                    assignments = cluster_dict['strat_to_use']
+
+                    if not globals.decentralized:
+
+                        if type_of_action == 0:
+                            # assigned_leader = next((key for key, value in strat.items() if value == 'leader'), None)
+                            # assigned_leader = next((key for key, value in strat.items() if value == 'leader' and key in neighbors), None)
+                            # print(f'assigned leader: {assigned_leader}')
+                            if curr_action == 'leader':
+                                time_as_leader = robot.getTime()
+                                is_leader = True
+
+                        if type_of_action == 2: 
+                            ratio = 0.12
+                            base = 0.180
+                            norm = forward_speed - 5
+                            forward_per_sec = ratio * norm + base 
+                            
+                            dx = forward_per_sec * math.cos(curr_action)
+                            dy = forward_per_sec * math.sin(curr_action)
+                            
+                            goal_position = (cd_x + dx, cd_x + dy)
+                            curr_action = goal_position
+                        
+                        time_queued = robot.getTime()
+
+                    else: 
+                        # doing decentralized behavior with mcdt
+                        if type_of_action == 0: # flock 
+                            if type_of_action == 0:
+                                if curr_action == 'leader':
+                                    time_as_leader = robot.getTime()
+                                    is_leader = True
+
+                            assigned_leader = next(key for key, value in assignments.items() if value == 'leader')
+                            # print(f'assigned leader: {assigned_leader}')
+                            if using_best: 
+                                action, node = mcdt.iterate_strategically(trees[0]) 
+                            else: 
+                                action, node = mcdt.iterate(trees[0])
+                            curr_node = node
+                            process_decentralized(type_of_action, node, action, neighbors, center)
+
+                        elif type_of_action == 1:  # queue 
+                            if using_best: 
+                                action, node = mcdt.iterate_strategically(trees[0])  
+                            else: 
+                                action, node = mcdt.iterate(trees[0])
+
+                            curr_node = node
+                            process_decentralized(type_of_action, node, action, neighbors, center)
+
+                        elif type_of_action == 2: # disperse 
+                            if using_best: 
+                                action, node = mcdt.iterate_strategically(trees[0])  
+                            else: 
+                                action, node = mcdt.iterate(trees[0])
+
+                            curr_node = node
+                            process_decentralized(type_of_action, node, action, neighbors, center)
+
+  
+            else: 
+                print('ignoring, other action still in progress')
+            
+            receiver.nextPacket()
+            
         elif message == 'clean': 
             # want to pause controller until finished 
             cleaning = True 
@@ -618,7 +1019,7 @@ def interpret(timestep):
             
         elif 'comm_response' in message and str(message.split('-')[1]) == str(given_id) and communication: 
         
-            print('updating orientation for', given_id, 'to', message.split('[')[1], 'for given id', given_id)
+            # print('updating orientation for', given_id, 'to', message.split('[')[1], 'for given id', given_id)
             roll, pitch, yaw = inertia.getRollPitchYaw()
             yaw = round(yaw, 2)
             chosen_direction = float(message.split('[')[1])
@@ -630,12 +1031,39 @@ def interpret(timestep):
             receiver.nextPacket()
             
     if receiver_individual.getQueueLength()>0:
-        # message = receiver_individual.getData().decode('utf-8')
         message = receiver_individual.getString()
-        
+
         if 'child' in message and communication: 
             next_child = message[5:].split("*")
             num_better += 1
+            receiver_individual.nextPacket()
+            
+            
+        elif 'agent' in message and 'id_ind' not in message: 
+            msg = message 
+            # print(f'received agent info: {msg}')
+            emitter.send(str(message).encode('utf-8'))
+            receiver_individual.nextPacket()
+            
+
+        elif 'neighbors_update' in message and curr_action != [] and type_of_action == 0: 
+            curr_others = ast.literal_eval(message[10:])
+            assigned_index = assigned_leader
+
+            goal_posx, goal_posy = curr_others[assigned_index]
+
+            ratio = 0.12
+            base = 0.180
+            norm = forward_speed - 5
+            forward_per_sec = ratio * norm + base 
+            
+            dir = round(math.atan2(goal_posy-cd_y,goal_posx-cd_x),2) 
+            dx = forward_per_sec * math.cos(dir)
+            dy = forward_per_sec * math.sin(dir)
+
+            goal_position = (cd_x + dx, cd_x + dy)
+            curr_action = goal_position
+
             receiver_individual.nextPacket()
             
         elif 'comm' in message and str(message.split('-')[1]) == str(given_id) and not 'comm_response' in message:
@@ -651,7 +1079,6 @@ def interpret(timestep):
             
         else: 
             receiver_individual.nextPacket()
-
 
 def communicate_with_robot():
     global given_id 
@@ -690,24 +1117,39 @@ start_count = robot.getTime()
 reversing = False 
 moving_forward = False  
 cleaning = False
+using_best = False 
 prev_gen_check = robot.getTime()
+
+cd_x, cd_y = float(gps.getValues()[0]), float(gps.getValues()[1])
 
 while robot.step(timestep) != -1 and sim_complete != True:
     
     if not cleaning: 
         interpret(str(robot.step(timestep)))
+        cd_x, cd_y = float(gps.getValues()[0]), float(gps.getValues()[1])
+
+        if curr_action == []:
+            prev_x, prev_y = cd_x, cd_y
+
+        if curr_action != []:
+            distance = math.sqrt((cd_x - prev_x)**2 + (cd_y - prev_y)**2)
+            path_length += distance
+            path_info['path_length'] += distance
+            prev_x, prev_y = cd_x, cd_y
         
         if robot.getTime() - prev_gen_check == 1: 
+            # if curr_action == []: 
+                # communicate_with_robot()
             prev_gen_check = robot.getTime()
             time_into_generation += 1
             if time_into_generation % 10 == 0: 
-                time_into_generation = 0
+                # time_into_generation = 0
                 agent_observation = {'num_interactions': 0, 'num_objects_observed': 0, 'num_collisions':0}
             # print('given id', given_id, 'updated time into generation + here dictionary', agent_observation['num_interactions'] , 'num collisions', agent_observation['num_collisions']) 
         
         # homing mechanism 
         if holding_something == True and not reversing and not moving_forward: # move towards nest (constant vector towards home) 
-            cd_x, cd_y = float(gps.getValues()[0]), float(gps.getValues()[1])
+            
             if math.dist([cd_x, cd_y], [0,0]) > 0.05:  
                 chosen_direction = round(math.atan2(-cd_y,-cd_x),2)
                 
@@ -734,6 +1176,106 @@ while robot.step(timestep) != -1 and sim_complete != True:
                 strategy = choose_strategy(chosen_direction, time_elapsed_since_block, time_elapsed_since_robot, w, update = False)
                 # time_elapsed = 0 
     
+
+        if not reversing and not moving_forward and not holding_something:
+            
+            if curr_action != [] and not decentralized: 
+                done = process_action((cd_x, cd_y))
+                
+                if not done: 
+                    if type_of_action != 1:
+                        goal_posx, goal_posy = curr_action[0] + cd_x, curr_action[0] + cd_y # TODO: not correct, but logic is there 
+                        
+                    else: # queued behavior 
+                        goal_posx, goal_posy = cd_x, cd_y
+                        
+                    if math.dist([cd_x, cd_y], [0,0]) > 0.05:  
+                            if robot.getTime() - prev_time > time_allocated: # if unable to complete, not encouraged
+                                done = True # don't add any reward since not accomplished 
+                                curr_action = []
+                                is_leader = False
+                                msg = f'reward:{type_of_action}:{path_length_reward(path_length * 0.5)}'
+                                emitter_individual.send(msg.encode('utf-8'))
+                            else: 
+                                # print('proceeding with original path')
+                                chosen_direction = round(math.atan2(goal_posy-cd_y,goal_posx-cd_x),2) 
+                    else: # request new action 
+                        curr_action = []
+                        is_leader = False
+                        done = True
+                        msg = f'reward:{type_of_action}:{path_length_reward(path_length)}'
+                        emitter_individual.send(msg.encode('utf-8'))
+                        print(f'finished coord task')
+            if is_leader and not decentralized: 
+                if robot.getTime() - time_as_leader > time_allocated: # if unable to complete, not encouraged
+                    done = True # don't add any reward since not accomplished 
+                    curr_action = []
+                    is_leader = False
+                    msg = f'reward:{type_of_action}:{path_length_reward(path_length * 0.5)}'
+                    emitter_individual.send(msg.encode('utf-8'))
+
+            if decentralized and curr_action != []: 
+
+                if robot.getTime() - prev_time > time_allocated:
+                    # continue setting chosen_direction here 
+                    decent_index = 0
+                    decent_behaviors = []
+                    curr_action = []
+                    is_leader = False
+
+                    # update reward (based on path length )
+                    
+                    if path_info['num_collisions'] == 0: 
+                        re = path_length_reward(path_info['path_length'])
+                    else: 
+                        re = path_length_reward(path_info['path_length']) * (1/path_info['num_collisions'])
+                    trees[decent_index].update_tree(curr_node, re) # TODO: make node defined
+
+                else: 
+                    if (time_allocated - robot.getTime()) % 1 == 0: 
+
+                        # get index of decent
+                        if decent_index <= (len(decent_behaviors) - 1): 
+
+                            # TODO: update next goal 
+                            if type_of_action == 0 and not is_leader: # if flocking, send msg
+                                goalx, goaly = curr_action
+                                if math.dist([cd_x, cd_y], [goalx, goaly]) < 0.05: 
+                                    # TODO: if already complete, ask for another, otherwise just continue moving towards original goal 
+                                    msg = 'pos_update'
+                                    emitter_individual.send(msg.encode('utf-8'))
+                                    
+                            elif type_of_action == 0 and is_leader: 
+                                # chosen_direction = strategy[curr_index]
+                                goalx, goaly = curr_action
+                                chosen_direction = round(math.atan2(goaly-cd_y,goalx-cd_x),2) 
+                                # curr_index += 1 
+                                # curr_action = '!'
+                                
+                            else: 
+                                goalx, goaly = decent_behaviors[decent_index]
+                                chosen_direction = round(math.atan2(goaly-cd_y,goalx-cd_x),2) 
+                                curr_action = '!'
+
+                                decent_index += 1
+
+                        elif decent_index <= (len(decent_behaviors) - 1) and math.dist([cd_x, cd_y], [goal_posx, goal_posy]) > 0.05:
+                            if type_of_action == 0 and not is_leader:
+                                x, y = curr_action
+                                chosen_direction = round(math.atan2(y-cd_y,x-cd_x),2) 
+
+                            elif type_of_action != 0: 
+                                goalx, goaly = decent_behaviors[decent_index]
+                                chosen_direction = round(math.atan2(goaly-cd_y,goalx-cd_x),2) 
+                                curr_action = '!'
+
+                        elif decent_index >= (len(decent_behaviors) - 1) and (type_of_action != 0):
+                            # just continue doing what you're doing 
+                            chosen_direction = strategy[curr_index]
+                            curr_index += 1 
+                            curr_action = '!'
+
+
         time_elapsed_since_robot +=1
         # biased random walk movement (each time step, cert prob of turning that direction) 
         roll, pitch, yaw = inertia.getRollPitchYaw()
@@ -749,13 +1291,16 @@ while robot.step(timestep) != -1 and sim_complete != True:
             # proceeds with previous strategy 
             orientation_found = False 
             if not holding_something: 
+                if curr_index >= len(strategy):
+                    curr_index = 0
+                    
                 chosen_direction = strategy[curr_index]
                 # curr_index += 1
             
         elif (i - prev_i >= time_switch and object_encountered != True and orientation_found == True and not reversing):
             orientation_found = False 
             remove_orientations = [] 
-            if not holding_something: 
+            if not holding_something and (not is_leader or curr_action == []): 
                 chosen_direction = strategy[curr_index]
                 curr_index += 1
         
@@ -786,8 +1331,12 @@ while robot.step(timestep) != -1 and sim_complete != True:
             
         if min(dist_vals) <= 330 and not reversing: # wall detection 
             fitness += 1 
+            strat_obs[current_strat_index]["collisions"] += 1
             remove_orientations.append(chosen_direction)
             reversing = True 
+
+            path_info['num_collisions'] += 1
+
             move_backwards()
             if time_into_generation != 0: 
                 agent_observation['num_collisions'] = (agent_observation['num_collisions'] + 1) / time_into_generation
@@ -796,6 +1345,7 @@ while robot.step(timestep) != -1 and sim_complete != True:
         if robot.getTime() - start_count >= 1: 
             if collision.getValue() == 1:
                 fitness += 1
+                strat_obs[current_strat_index]["collisions"] += 1
         
             # communication threshold  
             if not holding_something and not reversing: # max value for light 
@@ -819,7 +1369,6 @@ while robot.step(timestep) != -1 and sim_complete != True:
                 # stop()
                 if (object_encountered == False):
                     # frequency of observing foragable objects 
-  
                     num_not_found = checkForCollectable(camera.getRecognitionObjects())
                     if time_into_generation != 0: 
                         agent_observation['num_objects_observed'] = ((agent_observation['num_objects_observed']*(time_into_generation-1)) + num_not_found) / time_into_generation
@@ -828,7 +1377,7 @@ while robot.step(timestep) != -1 and sim_complete != True:
                     if min(dist_vals) < 500 and len(list) != 0:
                         firstObject = camera.getRecognitionObjects()[0]
                         count = len(camera.getRecognitionObjects())
-                        id = str(firstObject.getId())
+                        id = str(firstObject.get_id())
                         if id not in obj_found_so_far:
                             id = "$" + str(given_id) + "-" + str(id) # indication that it is a object to be deleted 
                             if prev_msg != id: 
